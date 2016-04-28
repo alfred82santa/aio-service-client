@@ -1,8 +1,3 @@
-'''
-Created on 02/04/2014
-
-:author: alfred
-'''
 import logging
 from asyncio import coroutine, get_event_loop
 from urllib.parse import urlparse, urlunsplit
@@ -86,6 +81,7 @@ class ServiceClient:
             e.response = response
             raise e
 
+        session.close()
         return response
 
     @coroutine
@@ -167,3 +163,4 @@ class ServiceClient:
         self.logger.debug("Calling {0} plugin hooks...".format(hook))
         for func in hooks:
             func(service_client=self)
+
