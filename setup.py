@@ -16,7 +16,7 @@ setup(
         'Development Status :: 4 - Beta'],
     packages=['service_client'],
     include_package_data=True,
-    install_requires=['dirty-loader'],
+    install_requires=['dirty-loader', 'aiohttp'],
     description="Service Client Framework powered by Python asyncio.",
     long_description=open(os.path.join(os.path.dirname(__file__), 'README.rst')).read(),
     test_suite="nose.collector",
