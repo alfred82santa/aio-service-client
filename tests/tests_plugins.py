@@ -6,9 +6,6 @@ Created on 04/04/2014
 from asyncio import coroutine
 from aiohttp.client import ClientSession
 from asynctest.case import TestCase
-
-from aiohttp.client_reqrep import ClientResponse
-
 from service_client.plugins import Path, Timeout, Headers, QueryParams, Mock
 
 
@@ -244,9 +241,9 @@ class TestMocker(TestCase):
         self.plugin = Mock(namespaces={'mocks': 'tests.mocks'})
         self.session = ClientSession()
         self.service_desc = {'mock': {
-                                 'mock_type': 'mocks:FakeMock',
-                                 'file': 'data/mocks/opengate_v6/alarm/alarm_list.json'
-                             }}
+            'mock_type': 'mocks:FakeMock',
+            'file': 'data/mocks/opengate_v6/alarm/alarm_list.json'
+        }}
 
         self.service_client = type('DynTestServiceClient', (),
                                    {'rest_service_name': 'test_service_name',
@@ -260,5 +257,3 @@ class TestMocker(TestCase):
         self.assertIsInstance(self.session.request, FakeMock)
         response = self.session.request('POST', 'default_url')
         self.assertEqual(200, response.status)
-
-

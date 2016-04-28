@@ -515,4 +515,4 @@ class ServiceBasicTest(TestCase):
 
         self.service.serializer = serializer
 
-        response = yield from self.service.call('testService5', payload='aaaa')
+        yield from self.service.call('testService5', payload='aaaa')

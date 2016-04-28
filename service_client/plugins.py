@@ -103,5 +103,3 @@ class Mock(BasePlugin):
             session.request.set_request_params(request_params)
         except AttributeError:
             pass
-
-

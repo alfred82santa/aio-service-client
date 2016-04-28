@@ -25,4 +25,3 @@ class FakeMock:
         response.status = 200
 
         return response
-

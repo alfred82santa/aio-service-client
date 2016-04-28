@@ -43,8 +43,8 @@ class ServiceClient:
         yield from self.prepare_request_params(service_desc, session, request_params)
 
         self.logger.info("Calling service_client {0} using {1} {2}".format(service_name,
-                                                                    request_params['method'],
-                                                                    request_params['url']))
+                                                                           request_params['method'],
+                                                                           request_params['url']))
 
         payload = yield from self.prepare_payload(service_desc, session, request_params, payload)
         try:

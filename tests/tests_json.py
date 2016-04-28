@@ -16,6 +16,7 @@ class TestJsonParser(TestCase):
     def test_parse_none(self):
         self.assertIsNone(self.parser(None))
 
+
 class TestJsonSerializer(TestCase):
 
     def setUp(self):
@@ -25,5 +26,3 @@ class TestJsonSerializer(TestCase):
 
         self.assertEqual('{"pepito": "grillo"}',
                          self.serializer({"pepito": "grillo"}))
-
-
