@@ -26,8 +26,6 @@ class ServiceClient:
         self.base_path = base_path
         self.loop = loop or get_event_loop()
 
-        self.connector = TCPConnector(loop=self.loop, **self.config.get('connector', {}))
-
     @coroutine
     def call(self, service_name, payload=None, **kwargs):
         self.logger.debug("Calling service_client {0}...".format(service_name))
@@ -92,7 +90,8 @@ class ServiceClient:
 
     @coroutine
     def create_session(self, service_desc, request_params):
-        session = ClientSession(connector=self.connector, loop=self.loop)
+        connector = TCPConnector(loop=self.loop, **self.config.get('connector', {}))
+        session = ClientSession(connector=connector, loop=self.loop)
         yield from self._execute_plugin_hooks('prepare_session', service_desc=service_desc, session=session,
                                               request_params=request_params)
         return session
