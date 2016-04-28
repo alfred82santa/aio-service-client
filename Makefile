@@ -34,7 +34,7 @@ requirements-docs:
 
 run-tests:
 	@echo "Running tests..."
-	nosetests --with-coverage -d --cover-package=${PACKAGE_COVERAGE}
+	nosetests --with-coverage -d --cover-package=${PACKAGE_COVERAGE} --cover-erase
 
 publish:
 	@echo "Publishing new version on Pypi..."
