@@ -137,7 +137,7 @@ class ServiceBasicTest(TestCase):
                               'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
-                              'path': '/path/to/service1'})
+                              'path': 'http://foo.com/sdsd/path/to/service1'})
 
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
@@ -228,7 +228,7 @@ class ServiceBasicTest(TestCase):
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
-                              'path': '/path/to/service2'})
+                              'path': 'http://foo.com/sdsd/path/to/service2'})
 
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
@@ -336,7 +336,7 @@ class ServiceBasicTest(TestCase):
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
-                              'path': '/path/to/service2'})
+                              'path': 'http://foo.com/sdsd/path/to/service2'})
 
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
@@ -428,7 +428,7 @@ class ServiceBasicTest(TestCase):
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
-                              'path': '/path/to/service2'})
+                              'path': 'http://foo.com/sdsd/path/to/service2'})
 
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
