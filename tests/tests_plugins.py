@@ -6,6 +6,8 @@ Created on 04/04/2014
 from asyncio import coroutine
 from aiohttp.client import ClientSession
 from asynctest.case import TestCase
+
+from service_client import SessionWrapper
 from service_client.plugins import Path, Timeout, Headers, QueryParams, Mock
 
 
@@ -160,26 +162,26 @@ class HeadersTest(TestCase):
 
     @coroutine
     def test_use_service(self):
-        self.service_desc['headers'] = {'x-foo-bar': 'test headers service'}
+        self.service_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
         yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
-                                                   'headers': {'X-FOO-BAR': 'test headers service'}})
+                                                   'headers': {'X-FOO-BAR': 'test headers service_client'}})
 
     @coroutine
     def test_add_from_service(self):
-        self.service_desc['headers'] = {'x-foo-bar-service': 'test headers service'}
+        self.service_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
         yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
                                                    'headers': {'X-FOO-BAR': 'test headers',
-                                                               'X-FOO-BAR-SERVICE': 'test headers service'}})
+                                                               'X-FOO-BAR-SERVICE': 'test headers service_client'}})
 
     @coroutine
     def test_use_request(self):
-        self.service_desc['headers'] = {'x-foo-bar': 'test headers service'}
+        self.service_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
         self.request_params['headers'] = {'x-foo-bar': 'test headers request'}
         yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
 
@@ -189,14 +191,14 @@ class HeadersTest(TestCase):
 
     @coroutine
     def test_add_from_request(self):
-        self.service_desc['headers'] = {'x-foo-bar-service': 'test headers service'}
+        self.service_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
         self.request_params['headers'] = {'x-foo-bar-request': 'test headers request'}
         yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
                                                    'headers': {'X-FOO-BAR': 'test headers',
-                                                               'X-FOO-BAR-SERVICE': 'test headers service',
+                                                               'X-FOO-BAR-SERVICE': 'test headers service_client',
                                                                'X-FOO-BAR-REQUEST': 'test headers request'}})
 
 
@@ -239,7 +241,7 @@ class TestMocker(TestCase):
 
     def setUp(self):
         self.plugin = Mock(namespaces={'mocks': 'tests.mocks'})
-        self.session = ClientSession()
+        self.session = SessionWrapper(ClientSession())
         self.service_desc = {'mock': {
             'mock_type': 'mocks:FakeMock',
             'file': 'data/mocks/opengate_v6/alarm/alarm_list.json'
