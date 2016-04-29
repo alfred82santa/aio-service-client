@@ -111,7 +111,6 @@ class ServiceClient:
             e.response = response
             raise e
 
-        session.close()
         return response
 
     @coroutine
@@ -192,6 +191,15 @@ class ServiceClient:
         self.logger.debug("Calling {0} plugin hooks...".format(hook))
         for func in hooks:
             func(service_client=self)
+
+    def __getattr__(self, item):
+
+        @coroutine
+        def wrap(*args, **kwargs):
+
+            return self.call(item, *args, **kwargs)
+
+        return wrap
 
     def __del__(self):  # pragma: no cover
         self.session.close()

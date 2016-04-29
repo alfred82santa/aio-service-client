@@ -294,6 +294,103 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
     @coroutine
+    def test_workflow_post_direct_call(self):
+        response = yield from self.service_client.testService2(payload='aaaa')
+        self.assertEqual(response, self.response)
+
+        self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
+        self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
+        self.assertDictEqual(self.plugin.calls['assign_service_client'][
+            'kwargs'], {'service_client': self.service_client})
+
+        self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
+        self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
+        self.assertDictEqual(
+            self.plugin.calls['prepare_session']['kwargs'], {
+                'service_desc': {'path': '/path/to/service2',
+                                 'method': 'post',
+                                 'service_name': 'testService2'},
+                'session': self.mock_session,
+                'request_params': {'data': 'aaaa',
+                                   'method': 'POST',
+                                   'url': 'http://foo.com/sdsd/path/to/service2'}})
+
+        self.assertIn('prepare_path', self.plugin.calls, "Prepare path call")
+        self.assertEqual(self.plugin.calls['prepare_path']['args'], ())
+        self.assertDictEqual(self.plugin.calls['prepare_path']['kwargs'],
+                             {'service_desc': {'path': '/path/to/service2',
+                                               'method': 'post',
+                                               'service_name': 'testService2'},
+                              'session': self.mock_session,
+                              'request_params': {'method': 'POST',
+                                                 'url': 'http://foo.com/sdsd/path/to/service2',
+                                                 'data': 'aaaa'},
+                              'path': 'http://foo.com/sdsd/path/to/service2'})
+
+        self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
+        self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
+        self.assertDictEqual(self.plugin.calls['prepare_request_params']['kwargs'],
+                             {'service_desc': {'path': '/path/to/service2',
+                                               'method': 'post',
+                                               'service_name': 'testService2'},
+                              'session': self.mock_session,
+                              'request_params': {'method': 'POST',
+                                                 'url': 'http://foo.com/sdsd/path/to/service2',
+                                                 'data': 'aaaa'}})
+
+        self.assertIn('prepare_payload', self.plugin.calls, "Prepare request payload call")
+        self.assertEqual(self.plugin.calls['prepare_payload']['args'], ())
+        self.assertDictEqual(self.plugin.calls['prepare_payload']['kwargs'],
+                             {'service_desc': {'path': '/path/to/service2',
+                                               'method': 'post',
+                                               'service_name': 'testService2'},
+                              'session': self.mock_session,
+                              'request_params': {'method': 'POST',
+                                                 'url': 'http://foo.com/sdsd/path/to/service2',
+                                                 'data': 'aaaa'},
+                              'payload': 'aaaa'})
+
+        self.assertIn('before_request', self.plugin.calls, "Before request call")
+        self.assertEqual(self.plugin.calls['before_request']['args'], ())
+        self.assertDictEqual(self.plugin.calls['before_request']['kwargs'],
+                             {'service_desc': {'path': '/path/to/service2',
+                                               'method': 'post',
+                                               'service_name': 'testService2'},
+                              'session': self.mock_session,
+                              'request_params': {'method': 'POST',
+                                                 'url': 'http://foo.com/sdsd/path/to/service2',
+                                                 'data': 'aaaa'}})
+
+        self.assertIn('on_response', self.plugin.calls, "On response call")
+        self.assertEqual(self.plugin.calls['on_response']['args'], ())
+        self.assertDictEqual(self.plugin.calls['on_response']['kwargs'],
+                             {'service_desc': {'path': '/path/to/service2',
+                                               'method': 'post',
+                                               'service_name': 'testService2'},
+                              'session': self.mock_session,
+                              'request_params': {'method': 'POST',
+                                                 'url': 'http://foo.com/sdsd/path/to/service2',
+                                                 'data': 'aaaa'},
+                              'response': self.response})
+
+        self.assertIn('on_parsed_response', self.plugin.calls, "On parse response call")
+        self.assertEqual(self.plugin.calls['on_parsed_response']['args'], ())
+        self.assertDictEqual(self.plugin.calls['on_parsed_response']['kwargs'],
+                             {'service_desc': {'path': '/path/to/service2',
+                                               'method': 'post',
+                                               'service_name': 'testService2'},
+                              'session': self.mock_session,
+                              'request_params': {'method': 'POST',
+                                                 'url': 'http://foo.com/sdsd/path/to/service2',
+                                                 'data': 'aaaa'},
+                              'response': self.response})
+
+        self.assertEqual(self.response.data, b'bbbb')
+
+        self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
+        self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
+
+    @coroutine
     def test_workflow_post_exception_response(self):
 
         @coroutine
