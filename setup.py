@@ -2,8 +2,8 @@ from setuptools import setup
 import os
 
 setup(
-    name='aio-service-client',
-    url='https://github.com/alfred82santa/aio-service-client',
+    name='aio-service_client-client',
+    url='https://github.com/alfred82santa/aio-service_client-client',
     author='alfred82santa',
     version='0.1.0',
     author_email='alfred82santa@gmail.com',

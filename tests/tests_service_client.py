@@ -55,7 +55,10 @@ class FakePlugin:
 
 class ServiceBasicTest(TestCase):
 
-    def setUp(self):
+    @patch('service_client.ClientSession')
+    def setUp(self, mock_session):
+        self.mock_session = mock_session
+        self._mock_session()
 
         self.config = {}
         self.spec = {
@@ -85,14 +88,14 @@ class ServiceBasicTest(TestCase):
 
         self.plugin = FakePlugin()
 
-        self.service = ServiceClient(rest_service_name="TestService", spec=self.spec,
-                                     plugins=[self.plugin], config=self.config,
-                                     base_path='http://foo.com/sdsd')
+        self.service_client = ServiceClient(rest_service_name="TestService", spec=self.spec,
+                                            plugins=[self.plugin], config=self.config,
+                                            base_path='http://foo.com/sdsd')
 
     def tearDown(self):
         pass
 
-    def _mock_session(self, mock_session):
+    def _mock_session(self):
         @coroutine
         def request(*args, **kwargs):
             self.request = {'args': args, 'kwargs': kwargs}
@@ -101,20 +104,17 @@ class ServiceBasicTest(TestCase):
             self.response._content = b'bbbb'
             return self.response
 
-        mock_session.request.side_effect = request
-        mock_session.return_value = mock_session
+        self.mock_session.request.side_effect = request
+        self.mock_session.return_value = self.mock_session
 
-    @patch('service_client.ClientSession')
-    def test_workflow_get(self, mock_session):
-
-        self._mock_session(mock_session)
-
-        response = yield from self.service.call('testService1')
+    @coroutine
+    def test_workflow_get(self):
+        response = yield from self.service_client.call('testService1')
         self.assertEqual(response, self.response)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
-        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service})
+        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -123,7 +123,7 @@ class ServiceBasicTest(TestCase):
                 'service_desc': {'path': '/path/to/service1',
                                  'method': 'get',
                                  'service_name': 'testService1'},
-                'session': mock_session,
+                'session': self.mock_session,
                 'request_params': {'method': 'GET',
                                    'url': 'http://foo.com/sdsd/path/to/service1'}})
 
@@ -133,7 +133,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service1',
                                                'method': 'get',
                                                'service_name': 'testService1'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
                               'path': '/path/to/service1'})
@@ -144,7 +144,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service1',
                                                'method': 'get',
                                                'service_name': 'testService1'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'}})
 
@@ -154,7 +154,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service1',
                                                'method': 'get',
                                                'service_name': 'testService1'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
                               'payload': None})
@@ -165,7 +165,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service1',
                                                'method': 'get',
                                                'service_name': 'testService1'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'}})
 
@@ -175,7 +175,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service1',
                                                'method': 'get',
                                                'service_name': 'testService1'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
                               'response': self.response})
@@ -186,7 +186,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service1',
                                                'method': 'get',
                                                'service_name': 'testService1'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
                               'response': self.response})
@@ -194,17 +194,15 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
-    @patch('service_client.ClientSession')
-    def test_workflow_post(self, mock_session):
+    @coroutine
+    def test_workflow_post(self):
 
-        self._mock_session(mock_session)
-
-        response = yield from self.service.call('testService2', payload='aaaa')
+        response = yield from self.service_client.call('testService2', payload='aaaa')
         self.assertEqual(response, self.response)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
-        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service})
+        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -213,7 +211,7 @@ class ServiceBasicTest(TestCase):
                 'service_desc': {'path': '/path/to/service2',
                                  'method': 'post',
                                  'service_name': 'testService2'},
-                'session': mock_session,
+                'session': self.mock_session,
                 'request_params': {'data': 'aaaa',
                                    'method': 'POST',
                                    'url': 'http://foo.com/sdsd/path/to/service2'}})
@@ -224,7 +222,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -236,7 +234,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'}})
@@ -247,7 +245,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -259,7 +257,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'}})
@@ -270,7 +268,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -282,7 +280,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -293,8 +291,8 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
-    @patch('service_client.ClientSession')
-    def test_workflow_post_exception_response(self, mock_session):
+    @coroutine
+    def test_workflow_post_exception_response(self):
 
         @coroutine
         def request(*args, **kwargs):
@@ -302,17 +300,16 @@ class ServiceBasicTest(TestCase):
             self.ex = Exception()
             raise self.ex
 
-        mock_session.request.side_effect = request
-        mock_session.return_value = mock_session
+        self.mock_session.request.side_effect = request
 
         with self.assertRaises(Exception) as ex:
-            yield from self.service.call('testService2', payload='aaaa')
+            yield from self.service_client.call('testService2', payload='aaaa')
 
         self.assertEqual(self.ex, ex.exception)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
-        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service})
+        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -321,7 +318,7 @@ class ServiceBasicTest(TestCase):
                 'service_desc': {'path': '/path/to/service2',
                                  'method': 'post',
                                  'service_name': 'testService2'},
-                'session': mock_session,
+                'session': self.mock_session,
                 'request_params': {'data': 'aaaa',
                                    'method': 'POST',
                                    'url': 'http://foo.com/sdsd/path/to/service2'}})
@@ -332,7 +329,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -344,7 +341,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'}})
@@ -355,7 +352,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -367,7 +364,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'}})
@@ -378,7 +375,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -388,23 +385,22 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_parsed_response', self.plugin.calls, "On parsed response call")
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
-    @patch('service_client.ClientSession')
-    def test_workflow_post_exception_parser(self, mock_session):
-        self._mock_session(mock_session)
+    @coroutine
+    def test_workflow_post_exception_parser(self):
 
         def parse(data, *args, **kwargs):
             self.ex = Exception()
             raise self.ex
 
-        self.service.parser = parse
+        self.service_client.parser = parse
 
         with self.assertRaises(Exception) as ex:
-            yield from self.service.call('testService2', payload='aaaa')
+            yield from self.service_client.call('testService2', payload='aaaa')
         self.assertEqual(self.ex, ex.exception)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
-        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service})
+        self.assertDictEqual(self.plugin.calls['assign_service_client']['kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -413,7 +409,7 @@ class ServiceBasicTest(TestCase):
                 'service_desc': {'path': '/path/to/service2',
                                  'method': 'post',
                                  'service_name': 'testService2'},
-                'session': mock_session,
+                'session': self.mock_session,
                 'request_params': {'data': 'aaaa',
                                    'method': 'POST',
                                    'url': 'http://foo.com/sdsd/path/to/service2'}})
@@ -424,7 +420,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -436,7 +432,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'}})
@@ -447,7 +443,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -459,7 +455,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'}})
@@ -470,7 +466,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -482,7 +478,7 @@ class ServiceBasicTest(TestCase):
                              {'service_desc': {'path': '/path/to/service2',
                                                'method': 'post',
                                                'service_name': 'testService2'},
-                              'session': mock_session,
+                              'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
                                                  'data': 'aaaa'},
@@ -492,27 +488,24 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
         self.assertNotIn('on_parsed_response', self.plugin.calls, "On parse response call")
 
-    @patch('service_client.ClientSession')
-    def test_workflow_stream_response(self, mock_session):
-        self._mock_session(mock_session)
-
+    @coroutine
+    def test_workflow_stream_response(self):
         def parse(data, *args, **kwargs):
             self.ex = Exception()
             raise self.ex
 
-        self.service.parser = parse
+        self.service_client.parser = parse
 
-        response = yield from self.service.call('testService4', payload='aaaa')
+        response = yield from self.service_client.call('testService4', payload='aaaa')
         self.assertFalse(hasattr(response, 'data'))
 
-    @patch('service_client.ClientSession')
-    def test_workflow_stream_request(self, mock_session):
-        self._mock_session(mock_session)
+    @coroutine
+    def test_workflow_stream_request(self):
 
         def serializer(data, *args, **kwargs):
             self.ex = Exception()
             raise self.ex
 
-        self.service.serializer = serializer
+        self.service_client.serializer = serializer
 
-        yield from self.service.call('testService5', payload='aaaa')
+        yield from self.service_client.call('testService5', payload='aaaa')

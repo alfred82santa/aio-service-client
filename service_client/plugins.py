@@ -97,7 +97,7 @@ class Mock(BasePlugin):
     @coroutine
     def prepare_session(self, service_desc, session, request_params):
         mock_desc = service_desc.get('mock', {})
-        session.request = self._create_mock(mock_desc, loop=self.service_client.loop)
+        session.set_attr_wrap('request', self._create_mock(mock_desc, loop=self.service_client.loop))
 
         try:
             session.request.set_request_params(request_params)

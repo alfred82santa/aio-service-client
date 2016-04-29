@@ -5,6 +5,33 @@ from aiohttp.client import ClientSession
 from aiohttp.connector import TCPConnector
 
 
+class SessionWrapper:
+
+    def __init__(self, session):
+        self.set_custom_session(session)
+
+    def __getattr__(self, item):  # pragma: no cover
+        return getattr(self._session, item)
+
+    def __setattr__(self, key, value):  # pragma: no cover
+        return setattr(self._session, key, value)
+
+    def __str__(self):  # pragma: no cover
+        return str(self._session)
+
+    def __repr__(self):  # pragma: no cover
+        return repr(self._session)
+
+    def __eq__(self, other):
+        return self._session.__eq__(other)
+
+    def set_attr_wrap(self, key, value):
+        super(SessionWrapper, self).__setattr__(key, value)
+
+    def set_custom_session(self, session):
+        super(SessionWrapper, self).__setattr__('_session', session)
+
+
 class ServiceClient:
 
     def __init__(self, rest_service_name='GenericService', spec=None, plugins=None, config=None,
@@ -21,6 +48,9 @@ class ServiceClient:
         self.base_path = base_path
         self.loop = loop or get_event_loop()
 
+        self.connector = TCPConnector(loop=self.loop, **self.config.get('connector', {}))
+        self.session = ClientSession(connector=self.connector, loop=self.loop)
+
     @coroutine
     def call(self, service_name, payload=None, **kwargs):
         self.logger.debug("Calling service_client {0}...".format(service_name))
@@ -28,7 +58,7 @@ class ServiceClient:
         service_desc['service_name'] = service_name
 
         request_params = kwargs
-        session = yield from self.create_session(service_desc, request_params)
+        session = yield from self.prepare_session(service_desc, request_params)
 
         request_params['url'] = yield from self.generate_path(service_desc, session, request_params)
         request_params['method'] = service_desc.get('method', 'GET').upper()
@@ -85,9 +115,8 @@ class ServiceClient:
         return response
 
     @coroutine
-    def create_session(self, service_desc, request_params):
-        connector = TCPConnector(loop=self.loop, **self.config.get('connector', {}))
-        session = ClientSession(connector=connector, loop=self.loop)
+    def prepare_session(self, service_desc, request_params):
+        session = SessionWrapper(self.session)
         yield from self._execute_plugin_hooks('prepare_session', service_desc=service_desc, session=session,
                                               request_params=request_params)
         return session
@@ -164,3 +193,5 @@ class ServiceClient:
         for func in hooks:
             func(service_client=self)
 
+    def __del__(self):  # pragma: no cover
+        self.session.close()
