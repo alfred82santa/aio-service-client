@@ -124,6 +124,10 @@ class ServiceClient:
     @coroutine
     def generate_path(self, service_desc, session, request_params):
         path = service_desc.get('path', '')
+        url = list(urlparse(self.base_path))
+        url[2] = '/'.join([url[2].rstrip('/'), path.lstrip('/')])
+        url.pop()
+        path = urlunsplit(url)
         hooks = [getattr(plugin, 'prepare_path') for plugin in self._plugins
                  if hasattr(plugin, 'prepare_path')]
         self.logger.debug("Calling {0} plugin hooks...".format('prepare_path'))
@@ -131,11 +135,7 @@ class ServiceClient:
             path = yield from func(service_desc=service_desc, session=session,
                                    request_params=request_params, path=path)
 
-        path = path or ''
-        url = list(urlparse(self.base_path))
-        url[2] = '/'.join([url[2].rstrip('/'), path.lstrip('/')])
-        url.pop()
-        return urlunsplit(url)
+        return path
 
     @coroutine
     def prepare_request_params(self, service_desc, session, request_params):
