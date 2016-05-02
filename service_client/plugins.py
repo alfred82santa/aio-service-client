@@ -2,6 +2,8 @@ import weakref
 from asyncio import coroutine
 from urllib.parse import quote_plus
 from aiohttp.multidict import CIMultiDict
+from aiohttp.multipart import MultipartWriter
+
 from service_client.utils import IncompleteFormatter
 from dirty_loader import LoaderNamespaceReversedCached
 
@@ -103,3 +105,61 @@ class Mock(BasePlugin):
             session.request.set_request_params(request_params)
         except AttributeError:
             pass
+
+
+class Multipart(BasePlugin):
+
+    def __init__(self, default_multipart_content_type='form-data',
+                 default_content_disposition='attachment'):
+        self.default_multipart_content_type = default_multipart_content_type
+        self.default_content_disposition = default_content_disposition
+
+    @coroutine
+    def before_request(self, service_desc, session, request_params):
+        if request_params['method'].upper() in ['GET', 'DELETE'] or 'files' not in request_params:
+            return
+
+        try:
+            multipart_content_type = service_desc['multipart']['content-type']
+        except KeyError:  # pragma: no cover
+            multipart_content_type = self.default_multipart_content_type
+
+        try:
+            content_type = request_params['headers'].pop('content-type')
+        except KeyError:  # pragma: no cover
+            content_type = ''
+
+        mp = MultipartWriter(multipart_content_type)
+
+        try:
+            data = request_params['data']
+            mp.append(data, {'content-type': content_type})
+        except KeyError:  # pragma: no cover
+            pass
+
+        files = request_params.pop('files')
+
+        for f in files:
+            try:
+                file_headers = f['headers']
+            except KeyError:
+                file_headers = None
+            part = mp.append(f['file'], file_headers)
+
+            try:
+                content_disposition = f['content-disposition']
+            except KeyError:
+                try:
+                    content_disposition = service_desc['multipart']['content-disposition']
+                except KeyError:  # pragma: no cover
+                    content_disposition = self.default_content_disposition
+
+            params = {}
+            try:
+                params['filename'] = f['filename']
+            except KeyError:
+                pass
+
+            part.set_content_disposition(content_disposition, **params)
+
+        request_params['data'] = mp

@@ -5,10 +5,11 @@ Created on 04/04/2014
 '''
 from asyncio import coroutine
 from aiohttp.client import ClientSession
+from aiohttp.multipart import MultipartWriter
 from asynctest.case import TestCase
 
 from service_client import SessionWrapper
-from service_client.plugins import Path, Timeout, Headers, QueryParams, Mock
+from service_client.plugins import Path, Timeout, Headers, QueryParams, Mock, Multipart
 
 
 class PathTest(TestCase):
@@ -248,7 +249,7 @@ class TestMocker(TestCase):
         }}
 
         self.service_client = type('DynTestServiceClient', (),
-                                   {'rest_service_name': 'test_service_name',
+                                   {'service_name': 'test_service_name',
                                     'loop': self.loop})()
         self.plugin.assign_service_client(self.service_client)
 
@@ -259,3 +260,73 @@ class TestMocker(TestCase):
         self.assertIsInstance(self.session.request, FakeMock)
         response = self.session.request('POST', 'default_url')
         self.assertEqual(200, response.status)
+
+
+class TestMultipart(TestCase):
+
+    def setUp(self):
+
+        self.plugin = Multipart()
+        self.session = SessionWrapper(ClientSession())
+        self.service_desc = {'multipart': {
+            'content-type': 'alternative',
+            'content-disposition': 'inline'
+        }}
+
+        self.service_client = type('DynTestServiceClient', (),
+                                   {'service_name': 'test_service_name',
+                                    'loop': self.loop})()
+        self.plugin.assign_service_client(self.service_client)
+
+    @coroutine
+    def test_no_files(self):
+
+        request_params = {'method': 'post',
+                          'data': 'aaaaaaa'}
+        yield from self.plugin.before_request(self.service_desc, self.session, request_params)
+
+        self.assertEqual(request_params['data'], 'aaaaaaa')
+
+    @coroutine
+    def test_multi_files_get(self):
+        request_params = {'method': 'get',
+                          'data': 'aaaaaaa',
+                          'files': [{'file': 'eeeee',
+                                     'filename': 'foo.txt',
+                                     'content-disposition': 'attachment'},
+                                    {'file': 'barbar',
+                                     'filename': 'bar.txt',
+                                     'content-disposition': 'form-data'},
+                                    {'file': 'other'}]}
+        yield from self.plugin.before_request(self.service_desc, self.session, request_params)
+
+        self.assertEqual(request_params['data'], 'aaaaaaa')
+
+    @coroutine
+    def test_multi_files_post(self):
+        request_params = {'method': 'post',
+                          'headers': {
+                              'content-type': 'application/json'
+                          },
+                          'data': 'aaaaaaa',
+                          'files': [{'file': 'eeeee',
+                                     'filename': 'foo.txt',
+                                     'headers': {'content-type': 'text/plain'},
+                                     'content-disposition': 'attachment'},
+                                    {'file': 'barbar',
+                                     'filename': 'bar.txt',
+                                     'content-disposition': 'form-data'},
+                                    {'file': 'other'}]}
+        yield from self.plugin.before_request(self.service_desc, self.session, request_params)
+
+        self.assertNotIn('files', request_params)
+        self.assertIsInstance(request_params['data'], MultipartWriter)
+        self.assertEqual(len(request_params['data'].parts), 4)
+        self.assertIn('content-type', request_params['data'].headers)
+        self.assertIn('multipart/alternative', request_params['data'].headers['content-type'])
+        self.assertEquals('application/json', request_params['data'].parts[0].headers['content-type'])
+        self.assertIn('attachment', request_params['data'].parts[1].headers['content-disposition'])
+        self.assertIn('filename="foo.txt"', request_params['data'].parts[1].headers['content-disposition'])
+        self.assertEquals('text/plain', request_params['data'].parts[1].headers['content-type'])
+        self.assertIn('form-data', request_params['data'].parts[2].headers['content-disposition'])
+        self.assertIn('inline', request_params['data'].parts[3].headers['content-disposition'])
