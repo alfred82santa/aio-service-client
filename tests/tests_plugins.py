@@ -3,31 +3,34 @@ Created on 04/04/2014
 
 @author: alfred
 '''
-from asyncio import coroutine
+import logging
+from asyncio import coroutine, TimeoutError
+from asyncio.tasks import sleep
+from datetime import datetime, timedelta
 from aiohttp.client import ClientSession
-from aiohttp.multipart import MultipartWriter
+from aiohttp.client_reqrep import ClientResponse
+from aiohttp.multidict import CIMultiDict
 from asynctest.case import TestCase
-
 from service_client import SessionWrapper
-from service_client.plugins import Path, Timeout, Headers, QueryParams, Mock, Multipart
+from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger
 
 
 class PathTest(TestCase):
 
     def setUp(self):
-        self.plugin = Path()
+        self.plugin = PathTokens()
         self.session = ClientSession()
-        self.service_desc = {'path': '/test1/path/noway',
-                             'method': 'GET',
-                             'param1': 'obladi',
-                             'param2': 'oblada'}
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada'}
 
         self.request_params = {'path_param1': 'foo',
                                'path_param2': 'bar'}
 
     @coroutine
     def testNoChanges(self):
-        self.assertEqual((yield from self.plugin.prepare_path(self.service_desc,
+        self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
                                                               '/test/path/noway')),
@@ -38,7 +41,7 @@ class PathTest(TestCase):
 
     @coroutine
     def testOneParam(self):
-        self.assertEqual((yield from self.plugin.prepare_path(self.service_desc,
+        self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
                                                               '/test/{path_param1}/noway')),
@@ -49,7 +52,7 @@ class PathTest(TestCase):
     @coroutine
     def testOneSpecialParam(self):
         request_params = {'path_param1': '*'}
-        self.assertEqual((yield from self.plugin.prepare_path(self.service_desc,
+        self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               request_params,
                                                               '/test/{path_param1}/noway')),
@@ -60,7 +63,7 @@ class PathTest(TestCase):
     @coroutine
     def testOneIntParam(self):
         request_params = {'path_param1': 1}
-        self.assertEqual((yield from self.plugin.prepare_path(self.service_desc,
+        self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               request_params,
                                                               '/test/{path_param1}/noway')),
@@ -70,7 +73,7 @@ class PathTest(TestCase):
 
     @coroutine
     def testTwoParams(self):
-        self.assertEqual((yield from self.plugin.prepare_path(self.service_desc,
+        self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
                                                               '/test/{path_param1}/{path_param2}/noway')),
@@ -80,7 +83,7 @@ class PathTest(TestCase):
 
     @coroutine
     def testTwoParamsRepeated(self):
-        self.assertEqual((yield from self.plugin.prepare_path(self.service_desc,
+        self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
                                                               '/test/{path_param1}/{path_param1}/noway')),
@@ -90,7 +93,7 @@ class PathTest(TestCase):
 
     @coroutine
     def testNoParam(self):
-        self.assertEqual((yield from self.plugin.prepare_path(self.service_desc,
+        self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
                                                               '/test/{path_param1}/{path_param3}/noway')),
@@ -102,42 +105,64 @@ class PathTest(TestCase):
 class TimeoutTest(TestCase):
 
     def setUp(self):
-        self.plugin = Timeout(default_timeout=34)
-        self.session = ClientSession()
-        self.service_desc = {'path': '/test1/path/noway',
-                             'method': 'GET',
-                             'param1': 'obladi',
-                             'param2': 'oblada'}
+
+        class SessionMock:
+
+            @coroutine
+            def request(self, *args, **kwargs):
+                yield from sleep(0.5)
+                raise Exception("No timeout")
+
+        self.plugin = Timeout(default_timeout=0.1)
+        self.session = SessionWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada'}
 
         self.request_params = {'path_param1': 'foo',
                                'path_param2': 'bar'}
 
     @coroutine
     def test_use_default(self):
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'timeout': 34})
+        t = datetime.now()
+        with self.assertRaises(TimeoutError):
+            yield from self.session.request()
+        self.assertGreater(datetime.now() - t, timedelta(seconds=0.1))
+        self.assertLess(datetime.now() - t, timedelta(seconds=0.2))
 
     @coroutine
     def test_use_service(self):
-        self.service_desc['timeout'] = 12
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        self.endpoint_desc['timeout'] = 0.2
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'timeout': 12})
+        t = datetime.now()
+        with self.assertRaises(TimeoutError):
+            yield from self.session.request()
+        self.assertGreater(datetime.now() - t, timedelta(seconds=0.2))
+        self.assertLess(datetime.now() - t, timedelta(seconds=0.3))
 
     @coroutine
     def test_use_request(self):
-        self.service_desc['timeout'] = 12
-        self.request_params['timeout'] = 65
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        self.endpoint_desc['timeout'] = 0.2
+        self.request_params['timeout'] = 0.3
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'timeout': 65})
+        t = datetime.now()
+        with self.assertRaises(TimeoutError):
+            yield from self.session.request()
+        self.assertGreater(datetime.now() - t, timedelta(seconds=0.3))
+        self.assertLess(datetime.now() - t, timedelta(seconds=0.4))
+
+    @coroutine
+    def test_no_timeout(self):
+        self.request_params['timeout'] = None
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+
+        with self.assertRaisesRegex(Exception, "No timeout"):
+            yield from self.session.request()
 
 
 class HeadersTest(TestCase):
@@ -145,17 +170,17 @@ class HeadersTest(TestCase):
     def setUp(self):
         self.plugin = Headers(default_headers={'x-foo-bar': 'test headers'})
         self.session = ClientSession()
-        self.service_desc = {'path': '/test1/path/noway',
-                             'method': 'GET',
-                             'param1': 'obladi',
-                             'param2': 'oblada'}
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada'}
 
         self.request_params = {'path_param1': 'foo',
                                'path_param2': 'bar'}
 
     @coroutine
     def test_use_default(self):
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
@@ -163,8 +188,8 @@ class HeadersTest(TestCase):
 
     @coroutine
     def test_use_service(self):
-        self.service_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        self.endpoint_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
@@ -172,8 +197,8 @@ class HeadersTest(TestCase):
 
     @coroutine
     def test_add_from_service(self):
-        self.service_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        self.endpoint_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
@@ -182,9 +207,9 @@ class HeadersTest(TestCase):
 
     @coroutine
     def test_use_request(self):
-        self.service_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
+        self.endpoint_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
         self.request_params['headers'] = {'x-foo-bar': 'test headers request'}
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
@@ -192,9 +217,9 @@ class HeadersTest(TestCase):
 
     @coroutine
     def test_add_from_request(self):
-        self.service_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
+        self.endpoint_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
         self.request_params['headers'] = {'x-foo-bar-request': 'test headers request'}
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
@@ -208,18 +233,18 @@ class QueryParamsTest(TestCase):
     def setUp(self):
         self.plugin = QueryParams()
         self.session = ClientSession()
-        self.service_desc = {'path': '/test1/path/noway',
-                             'method': 'GET',
-                             'param1': 'obladi',
-                             'param2': 'oblada',
-                             'query_params': {'qparam1': 1, 'qparam2': 'test2'}}
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada',
+                              'query_params': {'qparam1': 1, 'qparam2': 'test2'}}
 
         self.request_params = {'path_param1': 'foo',
                                'path_param2': 'bar'}
 
     @coroutine
     def test_use_default(self):
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
@@ -228,7 +253,7 @@ class QueryParamsTest(TestCase):
     @coroutine
     def test_use_request(self):
         self.request_params['params'] = {'qparamRequest': 'test'}
-        yield from self.plugin.prepare_request_params(self.service_desc, self.session, self.request_params)
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
@@ -238,95 +263,333 @@ class QueryParamsTest(TestCase):
                                                        'qparamRequest': 'test'}})
 
 
-class TestMocker(TestCase):
+class ElapsedTest(TestCase):
 
-    def setUp(self):
-        self.plugin = Mock(namespaces={'mocks': 'tests.mocks'})
-        self.session = SessionWrapper(ClientSession())
-        self.service_desc = {'mock': {
-            'mock_type': 'mocks:FakeMock',
-            'file': 'data/mocks/opengate_v6/alarm/alarm_list.json'
-        }}
-
-        self.service_client = type('DynTestServiceClient', (),
-                                   {'service_name': 'test_service_name',
-                                    'loop': self.loop})()
-        self.plugin.assign_service_client(self.service_client)
-
-    @coroutine
-    def test_calling_mock(self):
-        from .mocks import FakeMock
-        yield from self.plugin.prepare_session(self.service_desc, self.session, {})
-        self.assertIsInstance(self.session.request, FakeMock)
-        response = self.session.request('POST', 'default_url')
-        self.assertEqual(200, response.status)
-
-
-class TestMultipart(TestCase):
+    spend_time = 0.1
 
     def setUp(self):
 
-        self.plugin = Multipart()
-        self.session = SessionWrapper(ClientSession())
-        self.service_desc = {'multipart': {
-            'content-type': 'alternative',
-            'content-disposition': 'inline'
-        }}
+        this = self
 
-        self.service_client = type('DynTestServiceClient', (),
-                                   {'service_name': 'test_service_name',
-                                    'loop': self.loop})()
-        self.plugin.assign_service_client(self.service_client)
+        class SessionMock:
 
-    @coroutine
-    def test_no_files(self):
+            @coroutine
+            def request(self, *args, **kwargs):
+                yield from sleep(this.spend_time)
+                response = ClientResponse('get', 'http://test.test')
+                response._post_init(this.loop)
+                return response
 
-        request_params = {'method': 'post',
-                          'data': 'aaaaaaa'}
-        yield from self.plugin.before_request(self.service_desc, self.session, request_params)
+        self.plugin = Elapsed()
+        self.session = SessionWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada'}
 
-        self.assertEqual(request_params['data'], 'aaaaaaa')
-
-    @coroutine
-    def test_multi_files_get(self):
-        request_params = {'method': 'get',
-                          'data': 'aaaaaaa',
-                          'files': [{'file': 'eeeee',
-                                     'filename': 'foo.txt',
-                                     'content-disposition': 'attachment'},
-                                    {'file': 'barbar',
-                                     'filename': 'bar.txt',
-                                     'content-disposition': 'form-data'},
-                                    {'file': 'other'}]}
-        yield from self.plugin.before_request(self.service_desc, self.session, request_params)
-
-        self.assertEqual(request_params['data'], 'aaaaaaa')
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
 
     @coroutine
-    def test_multi_files_post(self):
-        request_params = {'method': 'post',
-                          'headers': {
-                              'content-type': 'application/json'
-                          },
-                          'data': 'aaaaaaa',
-                          'files': [{'file': 'eeeee',
-                                     'filename': 'foo.txt',
-                                     'headers': {'content-type': 'text/plain'},
-                                     'content-disposition': 'attachment'},
-                                    {'file': 'barbar',
-                                     'filename': 'bar.txt',
-                                     'content-disposition': 'form-data'},
-                                    {'file': 'other'}]}
-        yield from self.plugin.before_request(self.service_desc, self.session, request_params)
+    def test_elapsed(self):
+        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertNotIn('files', request_params)
-        self.assertIsInstance(request_params['data'], MultipartWriter)
-        self.assertEqual(len(request_params['data'].parts), 4)
-        self.assertIn('content-type', request_params['data'].headers)
-        self.assertIn('multipart/alternative', request_params['data'].headers['content-type'])
-        self.assertEquals('application/json', request_params['data'].parts[0].headers['content-type'])
-        self.assertIn('attachment', request_params['data'].parts[1].headers['content-disposition'])
-        self.assertIn('filename="foo.txt"', request_params['data'].parts[1].headers['content-disposition'])
-        self.assertEquals('text/plain', request_params['data'].parts[1].headers['content-type'])
-        self.assertIn('form-data', request_params['data'].parts[2].headers['content-disposition'])
-        self.assertIn('inline', request_params['data'].parts[3].headers['content-disposition'])
+        response = yield from self.session.request()
+        self.assertGreater(response.elapsed, timedelta(seconds=0.1))
+        self.assertLess(response.elapsed, timedelta(seconds=0.2))
+
+    @coroutine
+    def test_elapsed_2(self):
+        self.spend_time = 0.2
+        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
+
+        response = yield from self.session.request()
+        self.assertGreater(response.elapsed, timedelta(seconds=0.2))
+        self.assertLess(response.elapsed, timedelta(seconds=0.3))
+
+
+class InnerLogTest(TestCase):
+
+    def setUp(self):
+
+        this = self
+
+        class SessionMock:
+
+            @coroutine
+            def request(self, *args, **kwargs):
+                response = ClientResponse('get', 'http://test.test')
+                response._post_init(this.loop)
+                response._content = b'ssssssss'
+                response.status = 200
+                response.elapsed = timedelta(seconds=100)
+                response.headers = CIMultiDict({"content-type": "application/json"})
+                return response
+
+        class LoggerMock:
+
+            def log(self, level, message, *args, **kwargs):
+                self.level = level
+                self.message = message
+                self.args = args
+                self.kwargs = kwargs
+
+        class ServiceMock:
+
+            name = 'test_service'
+
+        self.logger = LoggerMock()
+        self.plugin = InnerLogger(self.logger, max_body_length=3)
+
+        self.service = ServiceMock()
+        self.plugin.assign_service_client(self.service)
+
+        self.session = SessionWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'POST',
+                              'param1': 'obladi',
+                              'param2': 'oblada',
+                              'endpoint': 'test_endpoint'}
+
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
+
+    @coroutine
+    def test_before_request(self):
+
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': '<NO BODY>',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_before_request_with_data(self):
+        self.request_params['data'] = 'data text'
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': 'dat',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_on_exception(self):
+        ex = AttributeError('Testing Exception')
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+        yield from self.plugin.on_exception(self.endpoint_desc, self.session, self.request_params, ex)
+
+        self.assertEqual(self.logger.level, logging.CRITICAL)
+        self.assertEqual(self.logger.message, "Testing Exception")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'EXCEPTION',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'exception': ex,
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_on_response(self):
+        resp = yield from self.session.request()
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, resp)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Response received")
+        self.assertEqual(self.logger.args, tuple())
+        self.maxDiff = None
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'RESPONSE',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'status_code': resp.status,
+                                    'body': 'sss',
+                                    'elapsed': resp.elapsed,
+                                    'headers': resp.headers,
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_on_parse_exception(self):
+        ex = AttributeError('Testing Exception')
+        resp = yield from self.session.request()
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+        yield from self.plugin.on_parse_exception(self.endpoint_desc, self.session, self.request_params, resp, ex)
+
+        self.assertEqual(self.logger.level, logging.CRITICAL)
+        self.assertEqual(self.logger.message, "Testing Exception")
+        self.assertEqual(self.logger.args, tuple())
+        self.maxDiff = None
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'EXCEPTION',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'status_code': resp.status,
+                                    'body': 'sss',
+                                    'elapsed': resp.elapsed,
+                                    'headers': resp.headers,
+                                    'exception': ex,
+                                    'tracking_token': self.session.tracking_token}})
+
+
+class OuterLogTest(TestCase):
+
+    def setUp(self):
+        this = self
+
+        class SessionMock:
+
+            @coroutine
+            def request(self, *args, **kwargs):
+                response = ClientResponse('get', 'http://test.test')
+                response._post_init(this.loop)
+                response._content = b'ssssssss'
+                response.status = 200
+                response.elapsed = timedelta(seconds=100)
+                response.headers = CIMultiDict({"content-type": "application/json"})
+                return response
+
+        class LoggerMock:
+
+            def log(self, level, message, *args, **kwargs):
+                self.level = level
+                self.message = message
+                self.args = args
+                self.kwargs = kwargs
+
+        class ServiceMock:
+            name = 'test_service'
+
+        self.logger = LoggerMock()
+        self.plugin = OuterLogger(self.logger, max_body_length=3)
+
+        self.service = ServiceMock()
+        self.plugin.assign_service_client(self.service)
+
+        self.session = SessionWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'POST',
+                              'param1': 'obladi',
+                              'param2': 'oblada',
+                              'endpoint': 'test_endpoint'}
+
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
+
+    @coroutine
+    def test_prepare_payload(self):
+        yield from self.plugin.prepare_payload(self.endpoint_desc, self.session, self.request_params, 'aaaaa')
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': 'aaa',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_prepare_payload_with_no_data(self):
+        yield from self.plugin.prepare_payload(self.endpoint_desc, self.session, self.request_params, None)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': '<NO BODY>',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_on_exception(self):
+        ex = AttributeError('Testing Exception')
+        yield from self.plugin.prepare_payload(self.endpoint_desc, self.session, self.request_params, None)
+        yield from self.plugin.on_exception(self.endpoint_desc, self.session, self.request_params, ex)
+
+        self.assertEqual(self.logger.level, logging.CRITICAL)
+        self.assertEqual(self.logger.message, "Testing Exception")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'EXCEPTION',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'exception': ex,
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_on_parse_response(self):
+        resp = yield from self.session.request()
+        resp.data = 'bbbbb'
+        yield from self.plugin.prepare_payload(self.endpoint_desc, self.session, self.request_params, None)
+        yield from self.plugin.on_parsed_response(self.endpoint_desc, self.session, self.request_params, resp)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Response received")
+        self.assertEqual(self.logger.args, tuple())
+        self.maxDiff = None
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'RESPONSE',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'status_code': resp.status,
+                                    'body': 'bbb',
+                                    'elapsed': resp.elapsed,
+                                    'headers': resp.headers,
+                                    'tracking_token': self.session.tracking_token}})
+
+    @coroutine
+    def test_on_parse_exception(self):
+        ex = AttributeError('Testing Exception')
+        resp = yield from self.session.request()
+        yield from self.plugin.prepare_payload(self.endpoint_desc, self.session, self.request_params, None)
+        yield from self.plugin.on_parse_exception(self.endpoint_desc, self.session, self.request_params, resp, ex)
+
+        self.assertEqual(self.logger.level, logging.CRITICAL)
+        self.assertEqual(self.logger.message, "Testing Exception")
+        self.assertEqual(self.logger.args, tuple())
+        self.maxDiff = None
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'EXCEPTION',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'status_code': resp.status,
+                                    'body': 'sss',
+                                    'elapsed': resp.elapsed,
+                                    'headers': resp.headers,
+                                    'exception': ex,
+                                    'tracking_token': self.session.tracking_token}})
