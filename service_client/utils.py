@@ -1,11 +1,14 @@
+import string
 from string import Formatter
+
+import random
 
 
 class IncompleteFormatter(Formatter):
 
     """
     String formatter to safe replace every placeholder. When the placeholder is not
-    replaced it remains the same in the string
+    replaced it remains the same in the string.
     """
 
     def __init__(self):
@@ -33,3 +36,15 @@ class IncompleteFormatter(Formatter):
 
     def get_not_substituted_fields(self):
         return self._not_substituted_fields
+
+
+def random_token(length=10):
+    """
+    Builds a random string.
+
+    :param length: Token length. **Default:** 10
+    :type length: int
+    :return: str
+    """
+    return ''.join(random.choice(string.ascii_uppercase + string.digits)
+                   for _ in range(length))

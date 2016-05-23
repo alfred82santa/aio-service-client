@@ -88,7 +88,7 @@ class ServiceBasicTest(TestCase):
 
         self.plugin = FakePlugin()
 
-        self.service_client = ServiceClient(rest_service_name="TestService", spec=self.spec,
+        self.service_client = ServiceClient(name="TestService", spec=self.spec,
                                             plugins=[self.plugin], config=self.config,
                                             base_path='http://foo.com/sdsd')
 
@@ -121,9 +121,9 @@ class ServiceBasicTest(TestCase):
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
         self.assertDictEqual(
             self.plugin.calls['prepare_session']['kwargs'], {
-                'service_desc': {'path': '/path/to/service1',
-                                 'method': 'get',
-                                 'service_name': 'testService1'},
+                'endpoint_desc': {'path': '/path/to/service1',
+                                  'method': 'get',
+                                  'endpoint': 'testService1'},
                 'session': self.mock_session,
                 'request_params': {'method': 'GET',
                                    'url': 'http://foo.com/sdsd/path/to/service1'}})
@@ -131,9 +131,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_path', self.plugin.calls, "Prepare path call")
         self.assertEqual(self.plugin.calls['prepare_path']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_path']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service1',
-                                               'method': 'get',
-                                               'service_name': 'testService1'},
+                             {'endpoint_desc': {'path': '/path/to/service1',
+                                                'method': 'get',
+                                                'endpoint': 'testService1'},
                               'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
@@ -142,9 +142,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_request_params']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service1',
-                                               'method': 'get',
-                                               'service_name': 'testService1'},
+                             {'endpoint_desc': {'path': '/path/to/service1',
+                                                'method': 'get',
+                                                'endpoint': 'testService1'},
                               'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'}})
@@ -152,9 +152,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_payload', self.plugin.calls, "Prepare request payload call")
         self.assertEqual(self.plugin.calls['prepare_payload']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_payload']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service1',
-                                               'method': 'get',
-                                               'service_name': 'testService1'},
+                             {'endpoint_desc': {'path': '/path/to/service1',
+                                                'method': 'get',
+                                                'endpoint': 'testService1'},
                               'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
@@ -163,9 +163,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('before_request', self.plugin.calls, "Before request call")
         self.assertEqual(self.plugin.calls['before_request']['args'], ())
         self.assertDictEqual(self.plugin.calls['before_request']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service1',
-                                               'method': 'get',
-                                               'service_name': 'testService1'},
+                             {'endpoint_desc': {'path': '/path/to/service1',
+                                                'method': 'get',
+                                                'endpoint': 'testService1'},
                               'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'}})
@@ -173,9 +173,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_response', self.plugin.calls, "On response call")
         self.assertEqual(self.plugin.calls['on_response']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_response']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service1',
-                                               'method': 'get',
-                                               'service_name': 'testService1'},
+                             {'endpoint_desc': {'path': '/path/to/service1',
+                                                'method': 'get',
+                                                'endpoint': 'testService1'},
                               'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
@@ -184,9 +184,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_parsed_response', self.plugin.calls, "On parse response call")
         self.assertEqual(self.plugin.calls['on_parsed_response']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_parsed_response']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service1',
-                                               'method': 'get',
-                                               'service_name': 'testService1'},
+                             {'endpoint_desc': {'path': '/path/to/service1',
+                                                'method': 'get',
+                                                'endpoint': 'testService1'},
                               'session': self.mock_session,
                               'request_params': {'method': 'GET',
                                                  'url': 'http://foo.com/sdsd/path/to/service1'},
@@ -210,9 +210,9 @@ class ServiceBasicTest(TestCase):
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
         self.assertDictEqual(
             self.plugin.calls['prepare_session']['kwargs'], {
-                'service_desc': {'path': '/path/to/service2',
-                                 'method': 'post',
-                                 'service_name': 'testService2'},
+                'endpoint_desc': {'path': '/path/to/service2',
+                                  'method': 'post',
+                                  'endpoint': 'testService2'},
                 'session': self.mock_session,
                 'request_params': {'data': 'aaaa',
                                    'method': 'POST',
@@ -221,9 +221,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_path', self.plugin.calls, "Prepare path call")
         self.assertEqual(self.plugin.calls['prepare_path']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_path']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -233,9 +233,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_request_params']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -244,9 +244,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_payload', self.plugin.calls, "Prepare request payload call")
         self.assertEqual(self.plugin.calls['prepare_payload']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_payload']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -256,9 +256,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('before_request', self.plugin.calls, "Before request call")
         self.assertEqual(self.plugin.calls['before_request']['args'], ())
         self.assertDictEqual(self.plugin.calls['before_request']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -267,9 +267,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_response', self.plugin.calls, "On response call")
         self.assertEqual(self.plugin.calls['on_response']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_response']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -279,9 +279,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_parsed_response', self.plugin.calls, "On parse response call")
         self.assertEqual(self.plugin.calls['on_parsed_response']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_parsed_response']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -307,9 +307,9 @@ class ServiceBasicTest(TestCase):
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
         self.assertDictEqual(
             self.plugin.calls['prepare_session']['kwargs'], {
-                'service_desc': {'path': '/path/to/service2',
-                                 'method': 'post',
-                                 'service_name': 'testService2'},
+                'endpoint_desc': {'path': '/path/to/service2',
+                                  'method': 'post',
+                                  'endpoint': 'testService2'},
                 'session': self.mock_session,
                 'request_params': {'data': 'aaaa',
                                    'method': 'POST',
@@ -318,9 +318,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_path', self.plugin.calls, "Prepare path call")
         self.assertEqual(self.plugin.calls['prepare_path']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_path']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -330,9 +330,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_request_params']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -341,9 +341,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_payload', self.plugin.calls, "Prepare request payload call")
         self.assertEqual(self.plugin.calls['prepare_payload']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_payload']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -353,9 +353,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('before_request', self.plugin.calls, "Before request call")
         self.assertEqual(self.plugin.calls['before_request']['args'], ())
         self.assertDictEqual(self.plugin.calls['before_request']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -364,9 +364,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_response', self.plugin.calls, "On response call")
         self.assertEqual(self.plugin.calls['on_response']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_response']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -376,9 +376,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_parsed_response', self.plugin.calls, "On parse response call")
         self.assertEqual(self.plugin.calls['on_parsed_response']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_parsed_response']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -415,9 +415,9 @@ class ServiceBasicTest(TestCase):
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
         self.assertDictEqual(
             self.plugin.calls['prepare_session']['kwargs'], {
-                'service_desc': {'path': '/path/to/service2',
-                                 'method': 'post',
-                                 'service_name': 'testService2'},
+                'endpoint_desc': {'path': '/path/to/service2',
+                                  'method': 'post',
+                                  'endpoint': 'testService2'},
                 'session': self.mock_session,
                 'request_params': {'data': 'aaaa',
                                    'method': 'POST',
@@ -426,9 +426,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_path', self.plugin.calls, "Prepare path call")
         self.assertEqual(self.plugin.calls['prepare_path']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_path']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -438,9 +438,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_request_params']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -449,9 +449,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_payload', self.plugin.calls, "Prepare request payload call")
         self.assertEqual(self.plugin.calls['prepare_payload']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_payload']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -461,9 +461,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('before_request', self.plugin.calls, "Before request call")
         self.assertEqual(self.plugin.calls['before_request']['args'], ())
         self.assertDictEqual(self.plugin.calls['before_request']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -472,9 +472,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_exception', self.plugin.calls, "On exception call")
         self.assertEqual(self.plugin.calls['on_exception']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_exception']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -507,9 +507,9 @@ class ServiceBasicTest(TestCase):
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
         self.assertDictEqual(
             self.plugin.calls['prepare_session']['kwargs'], {
-                'service_desc': {'path': '/path/to/service2',
-                                 'method': 'post',
-                                 'service_name': 'testService2'},
+                'endpoint_desc': {'path': '/path/to/service2',
+                                  'method': 'post',
+                                  'endpoint': 'testService2'},
                 'session': self.mock_session,
                 'request_params': {'data': 'aaaa',
                                    'method': 'POST',
@@ -518,9 +518,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_path', self.plugin.calls, "Prepare path call")
         self.assertEqual(self.plugin.calls['prepare_path']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_path']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -530,9 +530,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_request_params', self.plugin.calls, "Prepare request params call")
         self.assertEqual(self.plugin.calls['prepare_request_params']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_request_params']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -541,9 +541,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('prepare_payload', self.plugin.calls, "Prepare request payload call")
         self.assertEqual(self.plugin.calls['prepare_payload']['args'], ())
         self.assertDictEqual(self.plugin.calls['prepare_payload']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -553,9 +553,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('before_request', self.plugin.calls, "Before request call")
         self.assertEqual(self.plugin.calls['before_request']['args'], ())
         self.assertDictEqual(self.plugin.calls['before_request']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -564,9 +564,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_response', self.plugin.calls, "On response call")
         self.assertEqual(self.plugin.calls['on_response']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_response']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',
@@ -576,9 +576,9 @@ class ServiceBasicTest(TestCase):
         self.assertIn('on_parse_exception', self.plugin.calls, "On parse exception call")
         self.assertEqual(self.plugin.calls['on_parse_exception']['args'], ())
         self.assertDictEqual(self.plugin.calls['on_parse_exception']['kwargs'],
-                             {'service_desc': {'path': '/path/to/service2',
-                                               'method': 'post',
-                                               'service_name': 'testService2'},
+                             {'endpoint_desc': {'path': '/path/to/service2',
+                                                'method': 'post',
+                                                'endpoint': 'testService2'},
                               'session': self.mock_session,
                               'request_params': {'method': 'POST',
                                                  'url': 'http://foo.com/sdsd/path/to/service2',

@@ -1,11 +1,10 @@
 import weakref
+import logging
 from asyncio import coroutine
 from urllib.parse import quote_plus
+from aiohttp.helpers import Timeout as TimeoutContext
 from aiohttp.multidict import CIMultiDict
-from aiohttp.multipart import MultipartWriter
-
-from service_client.utils import IncompleteFormatter
-from dirty_loader import LoaderNamespaceReversedCached
+from service_client.utils import IncompleteFormatter, random_token
 
 
 class BasePlugin:
@@ -22,17 +21,21 @@ class BasePlugin:
         self._service_client = weakref.ref(service_client)
 
 
-class Path(BasePlugin):
+class PathTokens(BasePlugin):
 
-    def __init__(self, default_substitutions=None):
-        self.default_substitutions = default_substitutions or {}
+    def __init__(self, default_tokens=None):
+        self.default_token = default_tokens or {}
 
     @coroutine
-    def prepare_path(self, service_desc, session, request_params, path):
-        substitutions = self.default_substitutions.copy()
-        substitutions.update(request_params)
+    def prepare_path(self, endpoint_desc, session, request_params, path):
+        tokens = self.default_token.copy()
+        try:
+            tokens.update(endpoint_desc['path_tokens'])
+        except KeyError:
+            pass
+        tokens.update(request_params)
         formatter = IncompleteFormatter()
-        ret = formatter.format(path, **{k: quote_plus(str(v)) for k, v in substitutions.items()})
+        ret = formatter.format(path, **{k: quote_plus(str(v)) for k, v in tokens.items()})
         for field in formatter.get_substituted_fields():
             try:
                 request_params.pop(field)
@@ -43,16 +46,16 @@ class Path(BasePlugin):
 
 class Headers(BasePlugin):
 
-    def __init__(self, default_headers={}):
-        self.default_headers = default_headers.copy()
+    def __init__(self, default_headers=None):
+        self.default_headers = default_headers.copy() if default_headers else {}
 
     @coroutine
-    def prepare_request_params(self, service_desc, session, request_params):
+    def prepare_request_params(self, endpoint_desc, session, request_params):
         headers = request_params.get('headers', CIMultiDict()).copy()
         if not isinstance(headers, CIMultiDict):
             headers = CIMultiDict(headers)
         headers.update(self.default_headers)
-        headers.update(service_desc.get('headers', {}))
+        headers.update(endpoint_desc.get('headers', {}))
         headers.update(request_params.get('headers', {}))
         request_params['headers'] = headers
 
@@ -63,103 +66,180 @@ class Timeout(BasePlugin):
         self.default_timeout = default_timeout
 
     @coroutine
-    def prepare_request_params(self, service_desc, session, request_params):
-        request_params['timeout'] = request_params.get('timeout',
-                                                       service_desc.get('timeout',
-                                                                        self.default_timeout))
-        if request_params['timeout']:
-            request_params['timeout'] = int(request_params['timeout'])
+    def before_request(self, endpoint_desc, session, request_params):
+        try:
+            timeout = request_params.pop('timeout')
+        except KeyError:
+            timeout = endpoint_desc.get('timeout', self.default_timeout)
+
+        if timeout is None:
+            return
+
+        func = session.request
+
+        @coroutine
+        def request_wrapper(*args, **kwargs):
+            with TimeoutContext(timeout=timeout):
+                yield from func(*args, **kwargs)
+
+        session.set_attr_wrap('request', request_wrapper)
+
+
+class Elapsed(BasePlugin):
+
+    @coroutine
+    def prepare_session(self, endpoint_desc, session, request_params):
+
+        func = session.request
+
+        @coroutine
+        def request_wrapper(*args, **kwargs):
+            from datetime import datetime
+            t = datetime.now()
+            response = yield from func(*args, **kwargs)
+            response.elapsed = datetime.now() - t
+            return response
+
+        session.set_attr_wrap('request', request_wrapper)
 
 
 class QueryParams(BasePlugin):
 
     @coroutine
-    def prepare_request_params(self, service_desc, session, request_params):
-        query_params = service_desc.get('query_params', {}).copy()
+    def prepare_request_params(self, endpoint_desc, session, request_params):
+        query_params = endpoint_desc.get('query_params', {}).copy()
         query_params.update(request_params.get('params', {}))
         request_params['params'] = query_params
 
 
-class Mock(BasePlugin):
+class BaseLogger(BasePlugin):
 
-    def __init__(self, namespaces=None):
+    def __init__(self, logger, max_body_length=0, level=logging.INFO,
+                 on_exception_level=logging.CRITICAL,
+                 on_parse_exception_level=logging.CRITICAL):
+        self.logger = logger
+        self.max_body_length = max_body_length
+        self.level = level
+        self.on_exception_level = on_exception_level
+        self.on_parse_exception_level = on_parse_exception_level
 
-        self.loader = LoaderNamespaceReversedCached()
+    def _prepare_body(self, body_string):
+        return body_string[:self.max_body_length]
 
-        if namespaces:
-            for n, m in namespaces.items():
-                self.loader.register_namespace(n, m)
+    def _prepare_record(self, endpoint_desc, session, request_params):
+        log_data = {'endpoint': endpoint_desc['endpoint'],
+                    'service_name': self.service_client.name,
+                    'tracking_token': session.tracking_token}
 
-    def _create_mock(self, mock_desc, loop):
-        """
-        The class imported should have the __call__ function defined to be an object directly callable
-        """
-        return self.loader.factory(mock_desc.get('mock_type'), mock_desc, loop=loop)
+        log_data.update(request_params)
+
+        return log_data
 
     @coroutine
-    def prepare_session(self, service_desc, session, request_params):
-        mock_desc = service_desc.get('mock', {})
-        session.set_attr_wrap('request', self._create_mock(mock_desc, loop=self.service_client.loop))
+    def _prepare_request_log_record(self, endpoint_desc, session, request_params):
+        try:
+            tracking_token = request_params.pop('tracking_token')
+        except KeyError:
+            tracking_token = random_token()
+
+        session.tracking_token = tracking_token
+
+        log_data = self._prepare_record(endpoint_desc, session, request_params)
+        log_data['action'] = 'REQUEST'
+        return log_data
+
+    @coroutine
+    def _prepare_response_log_record(self, endpoint_desc, session, request_params, response):
+        log_data = self._prepare_record(endpoint_desc, session, request_params)
+        log_data['action'] = 'RESPONSE'
+        log_data['status_code'] = response.status
+        log_data['headers'] = response.headers
 
         try:
-            session.request.set_request_params(request_params)
+            log_data['elapsed'] = response.elapsed
+        except AttributeError:  # pragma: no cover
+            pass
+
+        try:
+            log_data['body'] = self._prepare_body(response.data)
         except AttributeError:
-            pass
+            log_data['body'] = self._prepare_body((yield from response.text()))
 
+        return log_data
 
-class Multipart(BasePlugin):
-
-    def __init__(self, default_multipart_content_type='form-data',
-                 default_content_disposition='attachment'):
-        self.default_multipart_content_type = default_multipart_content_type
-        self.default_content_disposition = default_content_disposition
+    def _prepare_exception(self, log_data, ex):
+        log_data['action'] = 'EXCEPTION'
+        log_data['exception'] = ex
 
     @coroutine
-    def before_request(self, service_desc, session, request_params):
-        if request_params['method'].upper() in ['GET', 'DELETE'] or 'files' not in request_params:
-            return
+    def _prepare_parse_response_exception_log_record(self, endpoint_desc, session, request_params, response, ex):
+        log_data = yield from self._prepare_response_log_record(endpoint_desc, session, request_params, response)
+        self._prepare_exception(log_data, ex)
 
+        return log_data
+
+    @coroutine
+    def _prepare_exception_log_record(self, endpoint_desc, session, request_params, ex):
+        log_data = self._prepare_record(endpoint_desc, session, request_params)
+        self._prepare_exception(log_data, ex)
+
+        return log_data
+
+    @coroutine
+    def on_exception(self, endpoint_desc, session, request_params, ex):
+        log_data = yield from self._prepare_exception_log_record(endpoint_desc, session, request_params, ex)
+        self.logger.log(self.on_exception_level, str(ex), extra=log_data)
+
+    @coroutine
+    def on_parse_exception(self, endpoint_desc, session, request_params, response, ex):
+        log_data = yield from self._prepare_parse_response_exception_log_record(endpoint_desc, session,
+                                                                                request_params, response, ex)
+        self.logger.log(self.on_parse_exception_level, str(ex), extra=log_data)
+
+
+class InnerLogger(BaseLogger):
+
+    @coroutine
+    def _prepare_on_request_log_record(self, endpoint_desc, session, request_params):
+        log_data = yield from self._prepare_request_log_record(endpoint_desc, session, request_params)
         try:
-            multipart_content_type = service_desc['multipart']['content-type']
-        except KeyError:  # pragma: no cover
-            multipart_content_type = self.default_multipart_content_type
+            log_data['body'] = self._prepare_body(log_data['data'])
+            del log_data['data']
+        except KeyError:
+            log_data['body'] = '<NO BODY>'
 
-        try:
-            content_type = request_params['headers'].pop('content-type')
-        except KeyError:  # pragma: no cover
-            content_type = ''
+        return log_data
 
-        mp = MultipartWriter(multipart_content_type)
+    @coroutine
+    def before_request(self, endpoint_desc, session, request_params):
+        log_data = yield from self._prepare_on_request_log_record(endpoint_desc, session, request_params)
+        self.logger.log(self.level, "Sending request", extra=log_data)
 
-        try:
-            data = request_params['data']
-            mp.append(data, {'content-type': content_type})
-        except KeyError:  # pragma: no cover
-            pass
+    @coroutine
+    def on_response(self, endpoint_desc, session, request_params, response):
+        log_data = yield from self._prepare_response_log_record(endpoint_desc, session, request_params, response)
+        self.logger.log(self.level, "Response received", extra=log_data)
 
-        files = request_params.pop('files')
 
-        for f in files:
-            try:
-                file_headers = f['headers']
-            except KeyError:
-                file_headers = None
-            part = mp.append(f['file'], file_headers)
+class OuterLogger(BaseLogger):
 
-            try:
-                content_disposition = f['content-disposition']
-            except KeyError:
-                try:
-                    content_disposition = service_desc['multipart']['content-disposition']
-                except KeyError:  # pragma: no cover
-                    content_disposition = self.default_content_disposition
+    @coroutine
+    def _prepare_prepare_payload_log_record(self, endpoint_desc, session, request_params, payload):
+        log_data = yield from self._prepare_request_log_record(endpoint_desc, session, request_params)
+        if payload is not None:
+            log_data['body'] = self._prepare_body(str(payload))
+        else:
+            log_data['body'] = '<NO BODY>'
 
-            params = {}
-            try:
-                params['filename'] = f['filename']
-            except KeyError:
-                pass
+        return log_data
 
-            part.set_content_disposition(content_disposition, **params)
+    @coroutine
+    def prepare_payload(self, endpoint_desc, session, request_params, payload):
+        log_data = yield from self._prepare_prepare_payload_log_record(endpoint_desc, session,
+                                                                       request_params, payload)
+        self.logger.log(self.level, "Sending request", extra=log_data)
 
-        request_params['data'] = mp
+    @coroutine
+    def on_parsed_response(self, endpoint_desc, session, request_params, response):
+        log_data = yield from self._prepare_response_log_record(endpoint_desc, session, request_params, response)
+        self.logger.log(self.level, "Response received", extra=log_data)

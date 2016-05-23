@@ -1,6 +1,6 @@
 from unittest.case import TestCase
 
-from service_client.utils import IncompleteFormatter
+from service_client.utils import IncompleteFormatter, random_token
 
 
 class TestIncompleteFormatter(TestCase):
@@ -72,3 +72,19 @@ class TestIncompleteFormatter(TestCase):
 
         self.assertEqual(self.formatter.get_substituted_fields(), [])
         self.assertEqual(self.formatter.get_not_substituted_fields(), ['0', '1'])
+
+
+class RandomTokenTest(TestCase):
+
+    def test_random_token(self):
+
+        self.assertNotEqual(random_token(), random_token())
+        self.assertNotEqual(random_token(), random_token())
+        self.assertNotEqual(random_token(), random_token())
+
+    def test_default_length(self):
+
+        self.assertEqual(len(random_token()), 10)
+
+    def test_custom_length(self):
+        self.assertEqual(len(random_token(20)), 20)
