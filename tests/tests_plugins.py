@@ -166,7 +166,6 @@ class TimeoutTest(TestCase):
             yield from self.session.request()
 
 
-
 class TimeoutWithResponseTest(TestCase):
 
     def setUp(self):
@@ -194,6 +193,7 @@ class TimeoutWithResponseTest(TestCase):
         yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
 
         self.assertEqual((yield from self.session.request()), 'response')
+
 
 class HeadersTest(TestCase):
 
