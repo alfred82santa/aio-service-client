@@ -12,7 +12,8 @@ from aiohttp.client_reqrep import ClientResponse
 from aiohttp.multidict import CIMultiDict
 from asynctest.case import TestCase
 from service_client import SessionWrapper
-from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger
+from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
+    TrackingToken
 
 
 class PathTest(TestCase):
@@ -308,6 +309,63 @@ class ElapsedTest(TestCase):
         self.assertLess(response.elapsed, timedelta(seconds=0.3))
 
 
+class TrackingTokenTest(TestCase):
+
+    def setUp(self):
+
+        this = self
+
+        class SessionMock:
+
+            @coroutine
+            def request(self, *args, **kwargs):
+                response = ClientResponse('get', 'http://test.test')
+                response._post_init(this.loop)
+                return response
+
+        self.plugin = TrackingToken(prefix='test-')
+        self.session = SessionWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada'}
+
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
+
+    @coroutine
+    def test_generate_tracking_token(self):
+        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertTrue(self.session.tracking_token.startswith('test-'))
+        self.assertEqual(len(self.session.tracking_token), 15)
+
+    @coroutine
+    def test_set_tracking_token(self):
+        self.request_params['tracking_token'] = 'FOOBAR123'
+        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertTrue(self.session.tracking_token.startswith('test-'))
+        self.assertEqual(self.session.tracking_token, 'test-FOOBAR123')
+
+    @coroutine
+    def test_set_tracking_token_prefix(self):
+        self.request_params['tracking_token_prefix'] = 'test-prefix-'
+        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertTrue(self.session.tracking_token.startswith('test-prefix-'))
+        self.assertEqual(len(self.session.tracking_token), 22)
+
+    @coroutine
+    def test_set_tracking_on_response(self):
+        self.request_params['tracking_token_prefix'] = 'test-prefix-'
+        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
+        response = yield from self.session.request()
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertEqual(self.session.tracking_token, response.tracking_token)
+
+
 class InnerLogTest(TestCase):
 
     def setUp(self):
@@ -368,8 +426,7 @@ class InnerLogTest(TestCase):
                                     'endpoint': 'test_endpoint',
                                     'path_param1': 'foo',
                                     'path_param2': 'bar',
-                                    'service_name': 'test_service',
-                                    'tracking_token': self.session.tracking_token}})
+                                    'service_name': 'test_service'}})
 
     @coroutine
     def test_before_request_with_data(self):
@@ -385,8 +442,41 @@ class InnerLogTest(TestCase):
                                     'endpoint': 'test_endpoint',
                                     'path_param1': 'foo',
                                     'path_param2': 'bar',
-                                    'service_name': 'test_service',
-                                    'tracking_token': self.session.tracking_token}})
+                                    'service_name': 'test_service'}})
+
+    @coroutine
+    def test_before_request_hidden_data(self):
+        self.endpoint_desc['logger'] = {'hidden_request_body': True}
+        self.request_params['data'] = 'data text'
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': '<HIDDEN>',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service'}})
+
+    @coroutine
+    def test_before_request_stream_data(self):
+        self.endpoint_desc['stream_request'] = True
+        self.request_params['data'] = 'data text'
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': '<STREAM>',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service'}})
 
     @coroutine
     def test_on_exception(self):
@@ -403,8 +493,7 @@ class InnerLogTest(TestCase):
                                     'path_param1': 'foo',
                                     'path_param2': 'bar',
                                     'service_name': 'test_service',
-                                    'exception': ex,
-                                    'tracking_token': self.session.tracking_token}})
+                                    'exception': ex}})
 
     @coroutine
     def test_on_response(self):
@@ -425,8 +514,51 @@ class InnerLogTest(TestCase):
                                     'status_code': resp.status,
                                     'body': 'sss',
                                     'elapsed': resp.elapsed,
-                                    'headers': resp.headers,
-                                    'tracking_token': self.session.tracking_token}})
+                                    'headers': resp.headers}})
+
+    @coroutine
+    def test_on_response_hidden_body(self):
+        self.endpoint_desc['logger'] = {'hidden_response_body': True}
+        resp = yield from self.session.request()
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, resp)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Response received")
+        self.assertEqual(self.logger.args, tuple())
+        self.maxDiff = None
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'RESPONSE',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'status_code': resp.status,
+                                    'body': '<HIDDEN>',
+                                    'elapsed': resp.elapsed,
+                                    'headers': resp.headers}})
+
+    @coroutine
+    def test_on_response_stream_body(self):
+        self.endpoint_desc['stream_response'] = True
+        resp = yield from self.session.request()
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, resp)
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Response received")
+        self.assertEqual(self.logger.args, tuple())
+        self.maxDiff = None
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'RESPONSE',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service',
+                                    'status_code': resp.status,
+                                    'body': '<STREAM>',
+                                    'elapsed': resp.elapsed,
+                                    'headers': resp.headers}})
 
     @coroutine
     def test_on_parse_exception(self):
@@ -449,8 +581,7 @@ class InnerLogTest(TestCase):
                                     'body': 'sss',
                                     'elapsed': resp.elapsed,
                                     'headers': resp.headers,
-                                    'exception': ex,
-                                    'tracking_token': self.session.tracking_token}})
+                                    'exception': ex}})
 
 
 class OuterLogTest(TestCase):
@@ -510,8 +641,39 @@ class OuterLogTest(TestCase):
                                     'endpoint': 'test_endpoint',
                                     'path_param1': 'foo',
                                     'path_param2': 'bar',
-                                    'service_name': 'test_service',
-                                    'tracking_token': self.session.tracking_token}})
+                                    'service_name': 'test_service'}})
+
+    @coroutine
+    def test_prepare_payload_hidden_data(self):
+        self.endpoint_desc['logger'] = {'hidden_request_body': True}
+        yield from self.plugin.prepare_payload(self.endpoint_desc, self.session, self.request_params, 'aaaaa')
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': '<HIDDEN>',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service'}})
+
+    @coroutine
+    def test_prepare_payload_stream_data(self):
+        self.endpoint_desc['stream_request'] = True
+        yield from self.plugin.prepare_payload(self.endpoint_desc, self.session, self.request_params, 'aaaaa')
+
+        self.assertEqual(self.logger.level, logging.INFO)
+        self.assertEqual(self.logger.message, "Sending request")
+        self.assertEqual(self.logger.args, tuple())
+        self.assertEqual(self.logger.kwargs,
+                         {"extra": {'action': 'REQUEST',
+                                    'body': '<STREAM>',
+                                    'endpoint': 'test_endpoint',
+                                    'path_param1': 'foo',
+                                    'path_param2': 'bar',
+                                    'service_name': 'test_service'}})
 
     @coroutine
     def test_prepare_payload_with_no_data(self):
@@ -526,8 +688,7 @@ class OuterLogTest(TestCase):
                                     'endpoint': 'test_endpoint',
                                     'path_param1': 'foo',
                                     'path_param2': 'bar',
-                                    'service_name': 'test_service',
-                                    'tracking_token': self.session.tracking_token}})
+                                    'service_name': 'test_service'}})
 
     @coroutine
     def test_on_exception(self):
@@ -544,8 +705,7 @@ class OuterLogTest(TestCase):
                                     'path_param1': 'foo',
                                     'path_param2': 'bar',
                                     'service_name': 'test_service',
-                                    'exception': ex,
-                                    'tracking_token': self.session.tracking_token}})
+                                    'exception': ex}})
 
     @coroutine
     def test_on_parse_response(self):
@@ -567,8 +727,7 @@ class OuterLogTest(TestCase):
                                     'status_code': resp.status,
                                     'body': 'bbb',
                                     'elapsed': resp.elapsed,
-                                    'headers': resp.headers,
-                                    'tracking_token': self.session.tracking_token}})
+                                    'headers': resp.headers}})
 
     @coroutine
     def test_on_parse_exception(self):
@@ -591,5 +750,4 @@ class OuterLogTest(TestCase):
                                     'body': 'sss',
                                     'elapsed': resp.elapsed,
                                     'headers': resp.headers,
-                                    'exception': ex,
-                                    'tracking_token': self.session.tracking_token}})
+                                    'exception': ex}})

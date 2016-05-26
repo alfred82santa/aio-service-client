@@ -123,6 +123,18 @@ In order to send a payload you must use ``payload`` keyword on call:
     # {"username": "foobar"}
 
 
+Changelog
+=========
+
+v0.3.0
+------
+
+- Added TrackingToken plugin. Token is added to session and to response.
+- Added a log formatter.
+- Removed tracking token stuff from log plugins.
+- Improved log plugins. They avoid to print body if it is streamed or must be hidden.
+- Improved session wrapper.
+
 Plugins
 =======
 
@@ -173,6 +185,11 @@ Elapsed
 -------
 
 It adds elapsed time to response.
+
+TrackingToken
+-------------
+
+It allows to assign a token for each pair request/response in order to identify them.
 
 QueryParams
 -----------

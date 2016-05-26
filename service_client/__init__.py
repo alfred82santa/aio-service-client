@@ -8,13 +8,20 @@ from aiohttp.connector import TCPConnector
 class SessionWrapper:
 
     def __init__(self, session):
-        self.set_custom_session(session)
+        self.set_warpped_session(session)
+        self.__dict__['_data'] = {}
 
-    def __getattr__(self, item):  # pragma: no cover
-        return getattr(self._session, item)
+    def __getattr__(self, item):
+        try:
+            return self._data[item]
+        except KeyError:
+            return getattr(self._session, item)
 
-    def __setattr__(self, key, value):  # pragma: no cover
-        return setattr(self._session, key, value)
+    def __setattr__(self, key, value):
+        if hasattr(self._session, key):  # pragma: no cover
+            return setattr(self._session, key, value)
+        else:
+            self._data[key] = value
 
     def __str__(self):  # pragma: no cover
         return str(self._session)
@@ -22,14 +29,17 @@ class SessionWrapper:
     def __repr__(self):  # pragma: no cover
         return repr(self._session)
 
-    def __eq__(self, other):
+    def __eq__(self, other):  # pragma: no cover
         return self._session.__eq__(other)
 
     def set_attr_wrap(self, key, value):
-        super(SessionWrapper, self).__setattr__(key, value)
+        self.__dict__[key] = value
 
-    def set_custom_session(self, session):
-        super(SessionWrapper, self).__setattr__('_session', session)
+    def set_warpped_session(self, session):
+        self.__dict__['_session'] = session
+
+    def get_wrapper_data(self):
+        return self._data.copy()
 
 
 class ServiceClient:
