@@ -80,7 +80,7 @@ class Timeout(BasePlugin):
         @coroutine
         def request_wrapper(*args, **kwargs):
             with TimeoutContext(timeout=timeout):
-                yield from func(*args, **kwargs)
+                return (yield from func(*args, **kwargs))
 
         session.set_attr_wrap('request', request_wrapper)
         session.timeout = timeout

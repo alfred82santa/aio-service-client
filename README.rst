@@ -126,6 +126,11 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.3.1
+------
+
+- Fix response when using Timeout plugin.
+
 v0.3.0
 ------
 

@@ -166,6 +166,35 @@ class TimeoutTest(TestCase):
             yield from self.session.request()
 
 
+
+class TimeoutWithResponseTest(TestCase):
+
+    def setUp(self):
+
+        class SessionMock:
+
+            @coroutine
+            def request(self, *args, **kwargs):
+                yield from sleep(0.5)
+                return 'response'
+
+        self.plugin = Timeout(default_timeout=0.1)
+        self.session = SessionWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada'}
+
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
+
+    @coroutine
+    def test_no_timeout(self):
+        self.request_params['timeout'] = None
+        yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertEqual((yield from self.session.request()), 'response')
+
 class HeadersTest(TestCase):
 
     def setUp(self):
