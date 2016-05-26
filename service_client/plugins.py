@@ -83,6 +83,7 @@ class Timeout(BasePlugin):
                 yield from func(*args, **kwargs)
 
         session.set_attr_wrap('request', request_wrapper)
+        session.timeout = timeout
 
 
 class Elapsed(BasePlugin):
@@ -101,6 +102,31 @@ class Elapsed(BasePlugin):
             return response
 
         session.set_attr_wrap('request', request_wrapper)
+
+
+class TrackingToken(BasePlugin):
+
+    def __init__(self, prefix='', length=10):
+        self.prefix = prefix
+        self.length = length
+
+    @coroutine
+    def prepare_session(self, endpoint_desc, session, request_params):
+        try:
+            tracking_token = request_params.pop('tracking_token')
+        except KeyError:
+            tracking_token = random_token(self.length)
+
+        try:
+            prefix = request_params.pop('tracking_token_prefix')
+        except KeyError:
+            prefix = self.prefix
+
+        session.tracking_token = prefix + tracking_token
+
+    @coroutine
+    def on_response(self, endpoint_desc, session, request_params, response):
+        response.tracking_token = session.tracking_token
 
 
 class QueryParams(BasePlugin):
@@ -128,22 +154,15 @@ class BaseLogger(BasePlugin):
 
     def _prepare_record(self, endpoint_desc, session, request_params):
         log_data = {'endpoint': endpoint_desc['endpoint'],
-                    'service_name': self.service_client.name,
-                    'tracking_token': session.tracking_token}
+                    'service_name': self.service_client.name}
 
+        log_data.update(session.get_wrapper_data())
         log_data.update(request_params)
 
         return log_data
 
     @coroutine
     def _prepare_request_log_record(self, endpoint_desc, session, request_params):
-        try:
-            tracking_token = request_params.pop('tracking_token')
-        except KeyError:
-            tracking_token = random_token()
-
-        session.tracking_token = tracking_token
-
         log_data = self._prepare_record(endpoint_desc, session, request_params)
         log_data['action'] = 'REQUEST'
         return log_data
@@ -160,10 +179,15 @@ class BaseLogger(BasePlugin):
         except AttributeError:  # pragma: no cover
             pass
 
-        try:
-            log_data['body'] = self._prepare_body(response.data)
-        except AttributeError:
-            log_data['body'] = self._prepare_body((yield from response.text()))
+        if endpoint_desc.get('logger', {}).get('hidden_response_body', False):
+            log_data['body'] = '<HIDDEN>'
+        elif endpoint_desc.get('stream_response', False):
+            log_data['body'] = '<STREAM>'
+        else:
+            try:
+                log_data['body'] = self._prepare_body(response.data)
+            except AttributeError:
+                log_data['body'] = self._prepare_body((yield from response.text()))
 
         return log_data
 
@@ -202,11 +226,22 @@ class InnerLogger(BaseLogger):
     @coroutine
     def _prepare_on_request_log_record(self, endpoint_desc, session, request_params):
         log_data = yield from self._prepare_request_log_record(endpoint_desc, session, request_params)
+
+        if endpoint_desc.get('logger', {}).get('hidden_request_body', False):
+            log_data['body'] = '<HIDDEN>'
+        elif endpoint_desc.get('stream_request', False):
+            log_data['body'] = '<STREAM>'
+        else:
+            try:
+                log_data['body'] = self._prepare_body(log_data['data'])
+                del log_data['data']
+            except KeyError:
+                log_data['body'] = '<NO BODY>'
+
         try:
-            log_data['body'] = self._prepare_body(log_data['data'])
             del log_data['data']
         except KeyError:
-            log_data['body'] = '<NO BODY>'
+            pass
 
         return log_data
 
@@ -226,7 +261,12 @@ class OuterLogger(BaseLogger):
     @coroutine
     def _prepare_prepare_payload_log_record(self, endpoint_desc, session, request_params, payload):
         log_data = yield from self._prepare_request_log_record(endpoint_desc, session, request_params)
-        if payload is not None:
+
+        if endpoint_desc.get('logger', {}).get('hidden_request_body', False):
+            log_data['body'] = '<HIDDEN>'
+        elif endpoint_desc.get('stream_request', False):
+            log_data['body'] = '<STREAM>'
+        elif payload is not None:
             log_data['body'] = self._prepare_body(str(payload))
         else:
             log_data['body'] = '<NO BODY>'
