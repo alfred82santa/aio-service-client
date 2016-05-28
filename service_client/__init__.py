@@ -1,45 +1,11 @@
 import logging
 from asyncio import coroutine, get_event_loop
+from asyncio.tasks import Task
 from urllib.parse import urlparse, urlunsplit
 from aiohttp.client import ClientSession
+from aiohttp.client_reqrep import ClientResponse
 from aiohttp.connector import TCPConnector
-
-
-class SessionWrapper:
-
-    def __init__(self, session):
-        self.set_warpped_session(session)
-        self.__dict__['_data'] = {}
-
-    def __getattr__(self, item):
-        try:
-            return self._data[item]
-        except KeyError:
-            return getattr(self._session, item)
-
-    def __setattr__(self, key, value):
-        if hasattr(self._session, key):  # pragma: no cover
-            return setattr(self._session, key, value)
-        else:
-            self._data[key] = value
-
-    def __str__(self):  # pragma: no cover
-        return str(self._session)
-
-    def __repr__(self):  # pragma: no cover
-        return repr(self._session)
-
-    def __eq__(self, other):  # pragma: no cover
-        return self._session.__eq__(other)
-
-    def set_attr_wrap(self, key, value):
-        self.__dict__[key] = value
-
-    def set_warpped_session(self, session):
-        self.__dict__['_session'] = session
-
-    def get_wrapper_data(self):
-        return self._data.copy()
+from .utils import ObjectWrapper
 
 
 class ServiceClient:
@@ -59,7 +25,20 @@ class ServiceClient:
         self.loop = loop or get_event_loop()
 
         self.connector = TCPConnector(loop=self.loop, **self.config.get('connector', {}))
-        self.session = ClientSession(connector=self.connector, loop=self.loop)
+        self.session = ClientSession(connector=self.connector, loop=self.loop,
+                                     response_class=self.create_response,
+                                     **self.config.get('session', {}))
+
+    def create_response(self, *args, **kwargs):
+        response = ObjectWrapper(ClientResponse(*args, **kwargs))
+        task = Task.current_task(loop=self.loop)
+
+        self._execute_plugin_hooks_sync('prepare_response',
+                                        endpoint_desc=task.endpoint_desc, session=task.session,
+                                        request_params=task.request_params,
+                                        response=response)
+
+        return response
 
     @coroutine
     def call(self, endpoint, payload=None, **kwargs):
@@ -92,7 +71,10 @@ class ServiceClient:
                                                              request_params=request_params)
 
             yield from self.before_request(endpoint_desc, session, request_params)
-
+            task = Task.current_task(loop=self.loop)
+            task.session = session
+            task.endpoint_desc = endpoint_desc
+            task.request_params = request_params
             response = yield from session.request(**request_params)
         except Exception as e:
             self.logger.warn("Exception calling service {0}: {1}".format(endpoint, e))
@@ -108,8 +90,10 @@ class ServiceClient:
             pass
 
         try:
+            data = yield from response.read()
+            yield from self.on_read(endpoint_desc, session, request_params, response)
             self.logger.info("Parsing response from {0}...".format(endpoint))
-            response.data = self.parser((yield from response.read()),
+            response.data = self.parser(data,
                                         session=session,
                                         endpoint_desc=endpoint_desc,
                                         response=response)
@@ -125,7 +109,7 @@ class ServiceClient:
 
     @coroutine
     def prepare_session(self, endpoint_desc, request_params):
-        session = SessionWrapper(self.session)
+        session = ObjectWrapper(self.session)
         yield from self._execute_plugin_hooks('prepare_session', endpoint_desc=endpoint_desc, session=session,
                                               request_params=request_params)
         return session
@@ -177,6 +161,11 @@ class ServiceClient:
                                               session=session, request_params=request_params, response=response)
 
     @coroutine
+    def on_read(self, endpoint_desc, session, request_params, response):
+        yield from self._execute_plugin_hooks('on_read', endpoint_desc=endpoint_desc,
+                                              session=session, request_params=request_params, response=response)
+
+    @coroutine
     def on_parse_exception(self, endpoint_desc, session, request_params, response, ex):
         yield from self._execute_plugin_hooks('on_parse_exception', endpoint_desc=endpoint_desc,
                                               session=session, request_params=request_params, response=response, ex=ex)
@@ -192,6 +181,12 @@ class ServiceClient:
         self.logger.debug("Calling {0} plugin hooks...".format(hook))
         for func in hooks:
             yield from func(*args, **kwargs)
+
+    def _execute_plugin_hooks_sync(self, hook, *args, **kwargs):
+        hooks = [getattr(plugin, hook) for plugin in self._plugins if hasattr(plugin, hook)]
+        self.logger.debug("Calling {0} plugin hooks...".format(hook))
+        for func in hooks:
+            func(*args, **kwargs)
 
     def add_plugins(self, plugins):
         self._plugins.extend(plugins)

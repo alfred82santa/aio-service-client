@@ -1,9 +1,11 @@
 import weakref
 import logging
-from asyncio import coroutine
+from asyncio import coroutine, Future
+from functools import wraps
+from datetime import datetime
 from urllib.parse import quote_plus
-from aiohttp.helpers import Timeout as TimeoutContext
 from aiohttp.multidict import CIMultiDict
+from aiohttp.helpers import Timeout as TimeoutContext
 from service_client.utils import IncompleteFormatter, random_token
 
 
@@ -75,33 +77,77 @@ class Timeout(BasePlugin):
         if timeout is None:
             return
 
-        func = session.request
+        def decorator(func):
+            @coroutine
+            @wraps(func)
+            def request_wrapper(*args, **kwargs):
+                with TimeoutContext(timeout=timeout):
+                    return (yield from func(*args, **kwargs))
 
-        @coroutine
-        def request_wrapper(*args, **kwargs):
-            with TimeoutContext(timeout=timeout):
-                return (yield from func(*args, **kwargs))
+            return request_wrapper
 
-        session.set_attr_wrap('request', request_wrapper)
+        session.decorate_attr('request', decorator)
         session.timeout = timeout
 
 
 class Elapsed(BasePlugin):
 
+    def __init__(self, headers=True, read=True, parse=True):
+        self.headers = headers
+        self.read = read
+        self.parse = parse
+
+    def _elapsed_enabled(self, elapsed_type, endpoint_desc, session, request_params):
+        result = getattr(self, elapsed_type)
+        try:
+            result = endpoint_desc['elapsed'][elapsed_type]
+        except KeyError:
+            pass
+
+        try:
+            result = request_params.pop(elapsed_type + "_elapsed")
+        except KeyError:
+            pass
+
+        return result
+
+    def prepare_response(self, endpoint_desc, session, request_params, response):
+
+        def decorator(func):
+            @coroutine
+            @wraps(func)
+            def start_wrapper(*args, **kwargs):
+                response.start_headers = datetime.now()
+                r = yield from func(*args, **kwargs)
+                response.headers_elapsed = datetime.now() - response.start_headers
+                return r
+
+            return start_wrapper
+
+        if self._elapsed_enabled('headers', endpoint_desc, session, request_params):
+            response.decorate_attr('start', decorator)
+
     @coroutine
-    def prepare_session(self, endpoint_desc, session, request_params):
+    def on_response(self, endpoint_desc, session, request_params, response):
+        if self._elapsed_enabled('read', endpoint_desc, session, request_params):
+            response.start_read = datetime.now()
 
-        func = session.request
+    @coroutine
+    def on_read(self, endpoint_desc, session, request_params, response):
+        try:
+            response.read_elapsed = datetime.now() - response.start_read
+        except AttributeError:
+            pass
 
-        @coroutine
-        def request_wrapper(*args, **kwargs):
-            from datetime import datetime
-            t = datetime.now()
-            response = yield from func(*args, **kwargs)
-            response.elapsed = datetime.now() - t
-            return response
+        if self._elapsed_enabled('parse', endpoint_desc, session, request_params):
+            response.start_parse = datetime.now()
 
-        session.set_attr_wrap('request', request_wrapper)
+    @coroutine
+    def on_parsed_response(self, endpoint_desc, session, request_params, response):
+        try:
+            response.parse_elapsed = datetime.now() - response.start_parse
+        except AttributeError:
+            pass
 
 
 class TrackingToken(BasePlugin):
@@ -283,3 +329,41 @@ class OuterLogger(BaseLogger):
     def on_parsed_response(self, endpoint_desc, session, request_params, response):
         log_data = yield from self._prepare_response_log_record(endpoint_desc, session, request_params, response)
         self.logger.log(self.level, "Response received", extra=log_data)
+
+
+class Pool(BasePlugin):
+
+    def __init__(self, limit=1):
+        self.limit = limit
+        self._waiters = []
+        self._acquired = 0
+
+    def _acquire(self):
+        self._acquired += 1
+
+    def _release(self):
+        self._acquired -= 1
+        while self._acquired < self.limit:
+            try:
+                fut = self._waiters.pop()
+                fut.set_result(None)
+                self._acquire()
+            except IndexError:  # pragma: no cover
+                break
+
+    @coroutine
+    def before_request(self, endpoint_desc, session, request_params):
+        if self._acquired >= self.limit:
+            fut = Future(loop=self.service_client.loop)
+            self._waiters.append(fut)
+            yield from fut
+        else:
+            self._acquire()
+
+    @coroutine
+    def on_response(self, endpoint_desc, session, request_params, response):
+        self._release()
+
+    @coroutine
+    def on_exception(self, endpoint_desc, session, request_params, ex):
+        self._release()

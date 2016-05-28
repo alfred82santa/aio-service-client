@@ -1,8 +1,11 @@
 from asyncio.coroutines import coroutine
+from asyncio.tasks import Task
+
 from aiohttp.client_reqrep import ClientResponse
 from asynctest.case import TestCase
 from asynctest.mock import patch
 from service_client import ServiceClient
+from service_client.utils import ObjectWrapper
 
 
 class FakePlugin:
@@ -12,6 +15,11 @@ class FakePlugin:
 
     def assign_service_client(self, *args, **kwargs):
         self.calls['assign_service_client'] = {'args': args, 'kwargs': kwargs}
+
+    @coroutine
+    def prepare_response(self, *args, **kwargs):
+        self.calls['prepare_response'] = {'args': args, 'kwargs': kwargs}
+        self.session = kwargs['session']
 
     @coroutine
     def prepare_session(self, *args, **kwargs):
@@ -43,6 +51,10 @@ class FakePlugin:
     @coroutine
     def on_response(self, *args, **kwargs):
         self.calls['on_response'] = {'args': args, 'kwargs': kwargs}
+
+    @coroutine
+    def on_read(self, *args, **kwargs):
+        self.calls['on_read'] = {'args': args, 'kwargs': kwargs}
 
     @coroutine
     def on_parse_exception(self, *args, **kwargs):
@@ -610,3 +622,13 @@ class ServiceBasicTest(TestCase):
         self.service_client.serializer = serializer
 
         yield from self.service_client.call('testService5', payload='aaaa')
+
+    @coroutine
+    def test_create_response(self):
+        task = Task.current_task(loop=self.loop)
+        task.session = {}
+        task.endpoint_desc = {}
+        task.request_params = {}
+        response = self.service_client.create_response(method='get', url="http://test.com")
+        response._post_init(self.loop)
+        self.assertIsInstance(response, ObjectWrapper)

@@ -3,17 +3,18 @@ Created on 04/04/2014
 
 @author: alfred
 '''
+import asyncio
 import logging
 from asyncio import coroutine, TimeoutError
-from asyncio.tasks import sleep
+from asyncio.tasks import sleep, shield
 from datetime import datetime, timedelta
 from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from aiohttp.multidict import CIMultiDict
 from asynctest.case import TestCase
-from service_client import SessionWrapper
+from service_client.utils import ObjectWrapper
 from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
-    TrackingToken
+    TrackingToken, Pool
 
 
 class PathTest(TestCase):
@@ -115,7 +116,7 @@ class TimeoutTest(TestCase):
                 raise Exception("No timeout")
 
         self.plugin = Timeout(default_timeout=0.1)
-        self.session = SessionWrapper(SessionMock())
+        self.session = ObjectWrapper(SessionMock())
         self.endpoint_desc = {'path': '/test1/path/noway',
                               'method': 'GET',
                               'param1': 'obladi',
@@ -178,7 +179,7 @@ class TimeoutWithResponseTest(TestCase):
                 return 'response'
 
         self.plugin = Timeout(default_timeout=0.1)
-        self.session = SessionWrapper(SessionMock())
+        self.session = ObjectWrapper(SessionMock())
         self.endpoint_desc = {'path': '/test1/path/noway',
                               'method': 'GET',
                               'param1': 'obladi',
@@ -293,6 +294,21 @@ class QueryParamsTest(TestCase):
                                                        'qparamRequest': 'test'}})
 
 
+class ResponseMock:
+
+    def __init__(self, spend_time):
+        self.spend_time = spend_time
+
+    @coroutine
+    def start(self, *args, **kwargs):
+        yield from sleep(self.spend_time)
+
+    @coroutine
+    def read(self):
+        yield from sleep(self.spend_time)
+        return 'data'
+
+
 class ElapsedTest(TestCase):
 
     spend_time = 0.1
@@ -303,15 +319,16 @@ class ElapsedTest(TestCase):
 
         class SessionMock:
 
+            response = ObjectWrapper(ResponseMock(0.1))
+
             @coroutine
             def request(self, *args, **kwargs):
                 yield from sleep(this.spend_time)
-                response = ClientResponse('get', 'http://test.test')
-                response._post_init(this.loop)
-                return response
+                self.response._post_init(this.loop)
+                return self.response
 
         self.plugin = Elapsed()
-        self.session = SessionWrapper(SessionMock())
+        self.session = ObjectWrapper(SessionMock())
         self.endpoint_desc = {'path': '/test1/path/noway',
                               'method': 'GET',
                               'param1': 'obladi',
@@ -321,21 +338,140 @@ class ElapsedTest(TestCase):
                                'path_param2': 'bar'}
 
     @coroutine
-    def test_elapsed(self):
-        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
+    def test_headers_elapsed(self):
+        response = ObjectWrapper(ResponseMock(0.1))
+        self.plugin.prepare_response(self.endpoint_desc, self.session, self.request_params, response)
 
-        response = yield from self.session.request()
-        self.assertGreater(response.elapsed, timedelta(seconds=0.1))
-        self.assertLess(response.elapsed, timedelta(seconds=0.2))
+        t = datetime.now()
+        yield from response.start()
+        self.assertGreater(response.headers_elapsed, timedelta(seconds=0.1))
+        self.assertLess(response.headers_elapsed, timedelta(seconds=0.2))
+        self.assertGreater(response.start_headers, t)
+        self.assertLess(response.start_headers, datetime.now())
 
     @coroutine
-    def test_elapsed_2(self):
-        self.spend_time = 0.2
-        yield from self.plugin.prepare_session(self.endpoint_desc, self.session, self.request_params)
+    def test_headers_elapsed_2(self):
+        response = ObjectWrapper(ResponseMock(0.2))
+        self.plugin.prepare_response(self.endpoint_desc, self.session, self.request_params, response)
 
-        response = yield from self.session.request()
-        self.assertGreater(response.elapsed, timedelta(seconds=0.2))
-        self.assertLess(response.elapsed, timedelta(seconds=0.3))
+        t = datetime.now()
+        yield from response.start()
+        self.assertGreater(response.headers_elapsed, timedelta(seconds=0.2))
+        self.assertLess(response.headers_elapsed, timedelta(seconds=0.3))
+        self.assertGreater(response.start_headers, t)
+        self.assertLess(response.start_headers, datetime.now())
+
+    @coroutine
+    def test_no_headers_elapsed_endpoint(self):
+        self.endpoint_desc['elapsed'] = {'headers': False}
+        response = ObjectWrapper(ResponseMock(0.1))
+        self.plugin.prepare_response(self.endpoint_desc, self.session, self.request_params, response)
+
+        yield from response.start()
+        self.assertFalse(hasattr(response, 'headers_elapsed'))
+        self.assertFalse(hasattr(response, 'start_headers'))
+
+    @coroutine
+    def test_no_headers_elapsed_request_params(self):
+        self.request_params['headers_elapsed'] = False
+        response = ObjectWrapper(ResponseMock(0.1))
+        self.plugin.prepare_response(self.endpoint_desc, self.session, self.request_params, response)
+
+        yield from response.start()
+        self.assertFalse(hasattr(response, 'headers_elapsed'))
+        self.assertFalse(hasattr(response, 'start_headers'))
+
+    @coroutine
+    def test_read_elapsed(self):
+        response = ObjectWrapper(ResponseMock(0.1))
+        t = datetime.now()
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, response)
+        yield from sleep(0.1)
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertGreater(response.read_elapsed, timedelta(seconds=0.1))
+        self.assertLess(response.read_elapsed, timedelta(seconds=0.2))
+        self.assertGreater(response.start_read, t)
+        self.assertLess(response.start_read, datetime.now())
+
+    @coroutine
+    def test_read_elapsed_2(self):
+        response = ObjectWrapper(ResponseMock(0.2))
+        t = datetime.now()
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, response)
+        yield from sleep(0.2)
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertGreater(response.read_elapsed, timedelta(seconds=0.2))
+        self.assertLess(response.read_elapsed, timedelta(seconds=0.3))
+        self.assertGreater(response.start_read, t)
+        self.assertLess(response.start_read, datetime.now())
+
+    @coroutine
+    def test_no_read_elapsed_endpoint(self):
+        self.endpoint_desc['elapsed'] = {'read': False}
+        response = ObjectWrapper(ResponseMock(0.1))
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, response)
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertFalse(hasattr(response, 'read_elapsed'))
+        self.assertFalse(hasattr(response, 'start_read'))
+
+    @coroutine
+    def test_no_read_elapsed_request_params(self):
+        self.request_params['read_elapsed'] = False
+        response = ObjectWrapper(ResponseMock(0.1))
+        yield from self.plugin.on_response(self.endpoint_desc, self.session, self.request_params, response)
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertFalse(hasattr(response, 'read_elapsed'))
+        self.assertFalse(hasattr(response, 'start_read'))
+
+    @coroutine
+    def test_parse_elapsed(self):
+        response = ObjectWrapper(ResponseMock(0.1))
+        t = datetime.now()
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+        yield from sleep(0.1)
+        yield from self.plugin.on_parsed_response(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertGreater(response.parse_elapsed, timedelta(seconds=0.1))
+        self.assertLess(response.parse_elapsed, timedelta(seconds=0.2))
+        self.assertGreater(response.start_parse, t)
+        self.assertLess(response.start_parse, datetime.now())
+
+    @coroutine
+    def test_parse_elapsed_2(self):
+        response = ObjectWrapper(ResponseMock(0.2))
+        t = datetime.now()
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+        yield from sleep(0.2)
+        yield from self.plugin.on_parsed_response(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertGreater(response.parse_elapsed, timedelta(seconds=0.2))
+        self.assertLess(response.parse_elapsed, timedelta(seconds=0.3))
+        self.assertGreater(response.start_parse, t)
+        self.assertLess(response.start_parse, datetime.now())
+
+    @coroutine
+    def test_no_parse_elapsed_endpoint(self):
+        self.endpoint_desc['elapsed'] = {'parse': False}
+        response = ObjectWrapper(ResponseMock(0.1))
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+        yield from self.plugin.on_parsed_response(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertFalse(hasattr(response, 'parse_elapsed'))
+        self.assertFalse(hasattr(response, 'start_parse'))
+
+    @coroutine
+    def test_no_parse_elapsed_request_params(self):
+        self.request_params['parse_elapsed'] = False
+        response = ObjectWrapper(ResponseMock(0.1))
+        yield from self.plugin.on_read(self.endpoint_desc, self.session, self.request_params, response)
+        yield from self.plugin.on_parsed_response(self.endpoint_desc, self.session, self.request_params, response)
+
+        self.assertFalse(hasattr(response, 'parse_elapsed'))
+        self.assertFalse(hasattr(response, 'start_parse'))
 
 
 class TrackingTokenTest(TestCase):
@@ -353,7 +489,7 @@ class TrackingTokenTest(TestCase):
                 return response
 
         self.plugin = TrackingToken(prefix='test-')
-        self.session = SessionWrapper(SessionMock())
+        self.session = ObjectWrapper(SessionMock())
         self.endpoint_desc = {'path': '/test1/path/noway',
                               'method': 'GET',
                               'param1': 'obladi',
@@ -431,7 +567,7 @@ class InnerLogTest(TestCase):
         self.service = ServiceMock()
         self.plugin.assign_service_client(self.service)
 
-        self.session = SessionWrapper(SessionMock())
+        self.session = ObjectWrapper(SessionMock())
         self.endpoint_desc = {'path': '/test1/path/noway',
                               'method': 'POST',
                               'param1': 'obladi',
@@ -647,7 +783,7 @@ class OuterLogTest(TestCase):
         self.service = ServiceMock()
         self.plugin.assign_service_client(self.service)
 
-        self.session = SessionWrapper(SessionMock())
+        self.session = ObjectWrapper(SessionMock())
         self.endpoint_desc = {'path': '/test1/path/noway',
                               'method': 'POST',
                               'param1': 'obladi',
@@ -780,3 +916,78 @@ class OuterLogTest(TestCase):
                                     'elapsed': resp.elapsed,
                                     'headers': resp.headers,
                                     'exception': ex}})
+
+
+class PoolTest(TestCase):
+
+    def setUp(self):
+        this = self
+
+        class SessionMock:
+
+            @coroutine
+            def request(self, *args, **kwargs):
+                response = ClientResponse('get', 'http://test.test')
+                response._post_init(this.loop)
+                response._content = b'ssssssss'
+                response.status = 200
+                response.elapsed = timedelta(seconds=100)
+                response.headers = CIMultiDict({"content-type": "application/json"})
+                return response
+
+        class ServiceMock:
+
+            name = 'test_service'
+            loop = self.loop
+
+        self.plugin = Pool()
+
+        self.service = ServiceMock()
+        self.plugin.assign_service_client(self.service)
+
+        self.session = ObjectWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'POST',
+                              'param1': 'obladi',
+                              'param2': 'oblada',
+                              'endpoint': 'test_endpoint'}
+
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
+
+    @coroutine
+    def test_pool_limit(self):
+
+        fut = self.plugin.before_request(self.endpoint_desc, self.session,
+                                         self.request_params)
+
+        yield from asyncio.wait_for(fut, 0.1)
+
+        fut = self.plugin.before_request(self.endpoint_desc, self.session,
+                                         self.request_params)
+
+        with self.assertRaises(TimeoutError):
+            yield from asyncio.wait_for(shield(fut), 0.1)
+
+        yield from self.plugin.on_response(self.endpoint_desc, self.session,
+                                           self.request_params, None)
+
+        yield from asyncio.wait_for(fut, 0.1)
+
+    @coroutine
+    def test_pool_limit_using_exception(self):
+        fut = self.plugin.before_request(self.endpoint_desc, self.session,
+                                         self.request_params)
+
+        yield from asyncio.wait_for(fut, 0.1)
+
+        fut = self.plugin.before_request(self.endpoint_desc, self.session,
+                                         self.request_params)
+
+        with self.assertRaises(TimeoutError):
+            yield from asyncio.wait_for(shield(fut), 0.1)
+
+        yield from self.plugin.on_exception(self.endpoint_desc, self.session,
+                                            self.request_params, Exception())
+
+        yield from asyncio.wait_for(fut, 0.1)

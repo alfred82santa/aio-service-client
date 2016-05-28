@@ -48,3 +48,45 @@ def random_token(length=10):
     """
     return ''.join(random.choice(string.ascii_uppercase + string.digits)
                    for _ in range(length))
+
+
+class ObjectWrapper:
+
+    def __init__(self, obj):
+        self.__dict__['_obj'] = None
+        self.__dict__['_data'] = {}
+        self.set_warpped_object(obj)
+
+    def __getattr__(self, item):
+        try:
+            return self._data[item]
+        except KeyError:
+            return getattr(self._obj, item)
+
+    def __setattr__(self, key, value):
+        if hasattr(self._obj, key):  # pragma: no cover
+            return setattr(self._obj, key, value)
+        else:
+            self._data[key] = value
+
+    def __str__(self):  # pragma: no cover
+        return str(self._obj)
+
+    def __repr__(self):  # pragma: no cover
+        return repr(self._obj)
+
+    def __eq__(self, other):  # pragma: no cover
+        return self._obj.__eq__(other)
+
+    def override_attr(self, key, value):
+        self.__dict__[key] = value
+
+    def decorate_attr(self, key, decorator):
+        attr = getattr(self, key)
+        self.__dict__[key] = decorator(attr)
+
+    def set_warpped_object(self, obj):
+        self.__dict__['_obj'] = obj
+
+    def get_wrapper_data(self):
+        return self._data.copy()

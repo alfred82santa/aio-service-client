@@ -4,8 +4,8 @@ from asyncio.coroutines import coroutine
 from aiohttp import hdrs
 from asynctest.case import TestCase
 from aiohttp.client import ClientSession
-from service_client import SessionWrapper
 from service_client.mocks import Mock, mock_manager, RawFileMock
+from service_client.utils import ObjectWrapper
 
 MOCKS_DIR = os.path.join(os.path.dirname(__file__), 'mock_files')
 
@@ -27,7 +27,7 @@ class TestMocker(TestCase):
 
     def setUp(self):
         self.plugin = Mock(namespaces={'mocks': 'tests.mocks'})
-        self.session = SessionWrapper(ClientSession())
+        self.session = ObjectWrapper(ClientSession())
         self.service_desc = {'mock': {'mock_type': 'mocks:FakeMock',
                                       'file': 'data/mocks/opengate_v6/alarm/alarm_list.json'},
                              'endpoint': 'test_endpoint'}
