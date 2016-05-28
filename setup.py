@@ -5,7 +5,7 @@ setup(
     name='aio-service-client',
     url='https://github.com/alfred82santa/aio-service-client',
     author='alfred82santa',
-    version='0.3.1',
+    version='0.4.0',
     license='LGPLv3',
     author_email='alfred82santa@gmail.com',
     classifiers=[

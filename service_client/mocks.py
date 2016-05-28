@@ -164,7 +164,7 @@ class Mock(BasePlugin):
     @coroutine
     def prepare_session(self, endpoint_desc, session, request_params):
         mock_desc = endpoint_desc.get('mock', {})
-        session.set_attr_wrap('request', self._create_mock(endpoint_desc,
+        session.override_attr('request', self._create_mock(endpoint_desc,
                                                            session,
                                                            request_params,
                                                            mock_desc.copy(),

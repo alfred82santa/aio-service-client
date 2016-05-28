@@ -126,6 +126,13 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.4.0
+------
+
+- Added new ``Pool`` plugin.
+- Improved ``Elapsed`` plugin.
+- Added new hook in order to allow plugins to override response methods.
+
 v0.3.1
 ------
 
