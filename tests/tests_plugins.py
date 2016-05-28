@@ -10,7 +10,6 @@ from asyncio.tasks import sleep, shield
 from datetime import datetime, timedelta
 from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
-from aiohttp.helpers import Timeout
 from aiohttp.multidict import CIMultiDict
 from asynctest.case import TestCase
 from service_client.utils import ObjectWrapper
