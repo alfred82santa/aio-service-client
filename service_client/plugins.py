@@ -1,14 +1,11 @@
 import weakref
 import logging
 from asyncio import coroutine, Future
-from urllib.parse import quote_plus
-from datetime import datetime
-
-from aiohttp.client_reqrep import ClientResponse
-from aiohttp.helpers import Timeout as TimeoutContext
-from aiohttp.multidict import CIMultiDict
 from functools import wraps
-
+from datetime import datetime
+from urllib.parse import quote_plus
+from aiohttp.multidict import CIMultiDict
+from aiohttp.helpers import Timeout as TimeoutContext
 from service_client.utils import IncompleteFormatter, random_token
 
 
