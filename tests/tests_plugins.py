@@ -484,7 +484,7 @@ class TrackingTokenTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ClientResponse('get', 'http://test.test')
+                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
                 response._post_init(this.loop)
                 return response
 
@@ -541,7 +541,7 @@ class InnerLogTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ClientResponse('get', 'http://test.test')
+                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
                 response._post_init(this.loop)
                 response._content = b'ssssssss'
                 response.status = 200
@@ -758,7 +758,7 @@ class OuterLogTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ClientResponse('get', 'http://test.test')
+                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
                 response._post_init(this.loop)
                 response._content = b'ssssssss'
                 response.status = 200
@@ -927,7 +927,7 @@ class PoolTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ClientResponse('get', 'http://test.test')
+                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
                 response._post_init(this.loop)
                 response._content = b'ssssssss'
                 response.status = 200

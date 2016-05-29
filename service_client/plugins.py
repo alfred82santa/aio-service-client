@@ -220,9 +220,10 @@ class BaseLogger(BasePlugin):
         log_data['status_code'] = response.status
         log_data['headers'] = response.headers
 
+        log_data.update(response.get_wrapper_data())
         try:
-            log_data['elapsed'] = response.elapsed
-        except AttributeError:  # pragma: no cover
+            del log_data['data']
+        except KeyError:  # pragma: no cover
             pass
 
         if endpoint_desc.get('logger', {}).get('hidden_response_body', False):
