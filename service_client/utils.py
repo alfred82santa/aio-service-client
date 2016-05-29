@@ -89,4 +89,4 @@ class ObjectWrapper:
         self.__dict__['_obj'] = obj
 
     def get_wrapper_data(self):
-        return self._data.copy()
+        return {k: v for k, v in self._data.items() if not callable(v)}

@@ -126,6 +126,11 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.4.1
+------
+
+- Fix elapsed data on logs.
+
 v0.4.0
 ------
 
