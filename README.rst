@@ -126,6 +126,12 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.5.0
+------
+
+- Added factories
+- Added spec loaders
+
 v0.4.1
 ------
 
