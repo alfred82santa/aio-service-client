@@ -65,10 +65,13 @@ class ServiceClient:
                     stream_request = endpoint_desc['stream_request']
                 except KeyError:
                     stream_request = False
-                if payload and not stream_request:
-                    request_params['data'] = self.serializer(payload, session=session,
-                                                             endpoint_desc=endpoint_desc,
-                                                             request_params=request_params)
+                if payload:
+                    if stream_request:
+                        request_params['data'] = payload
+                    else:
+                        request_params['data'] = self.serializer(payload, session=session,
+                                                                 endpoint_desc=endpoint_desc,
+                                                                 request_params=request_params)
 
             yield from self.before_request(endpoint_desc, session, request_params)
             task = Task.current_task(loop=self.loop)

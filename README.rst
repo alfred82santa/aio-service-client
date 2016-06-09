@@ -126,6 +126,11 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.5.1
+------
+
+- Resolved problem with requests streamed.
+
 v0.5.0
 ------
 
