@@ -129,6 +129,11 @@ Changelog
 v0.5.1
 ------
 
+- Made compatible with aiohttp 1.0.x.
+
+v0.5.1
+------
+
 - Resolved problem with requests streamed.
 
 v0.5.0

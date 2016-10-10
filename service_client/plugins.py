@@ -4,8 +4,9 @@ from asyncio import coroutine, Future
 from functools import wraps
 from datetime import datetime
 from urllib.parse import quote_plus
-from aiohttp.multidict import CIMultiDict
 from aiohttp.helpers import Timeout as TimeoutContext
+from multidict import CIMultiDict
+
 from service_client.utils import IncompleteFormatter, random_token
 
 

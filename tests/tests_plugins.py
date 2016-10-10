@@ -10,14 +10,14 @@ from asyncio.tasks import sleep, shield
 from datetime import datetime, timedelta
 from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
-from aiohttp.multidict import CIMultiDict
+from multidict import CIMultiDict
 from asynctest.case import TestCase
 from service_client.utils import ObjectWrapper
 from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
     TrackingToken, Pool
 
 
-class PathTest(TestCase):
+class PathTests(TestCase):
 
     def setUp(self):
         self.plugin = PathTokens()
@@ -31,7 +31,7 @@ class PathTest(TestCase):
                                'path_param2': 'bar'}
 
     @coroutine
-    def testNoChanges(self):
+    def test_no_changes(self):
         self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
@@ -42,7 +42,7 @@ class PathTest(TestCase):
                                                    'path_param2': 'bar'})
 
     @coroutine
-    def testOneParam(self):
+    def test_one_param(self):
         self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
@@ -52,7 +52,7 @@ class PathTest(TestCase):
         self.assertDictEqual(self.request_params, {'path_param2': 'bar'})
 
     @coroutine
-    def testOneSpecialParam(self):
+    def test_one_special_param(self):
         request_params = {'path_param1': '*'}
         self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
@@ -63,7 +63,7 @@ class PathTest(TestCase):
         self.assertDictEqual(request_params, {})
 
     @coroutine
-    def testOneIntParam(self):
+    def test_one_int_param(self):
         request_params = {'path_param1': 1}
         self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
@@ -74,7 +74,7 @@ class PathTest(TestCase):
         self.assertDictEqual(request_params, {})
 
     @coroutine
-    def testTwoParams(self):
+    def test_two_params(self):
         self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
@@ -84,7 +84,7 @@ class PathTest(TestCase):
         self.assertDictEqual(self.request_params, {})
 
     @coroutine
-    def testTwoParamsRepeated(self):
+    def test_two_params_repeated(self):
         self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
@@ -94,7 +94,7 @@ class PathTest(TestCase):
         self.assertDictEqual(self.request_params, {'path_param2': 'bar'})
 
     @coroutine
-    def testNoParam(self):
+    def test_no_param(self):
         self.assertEqual((yield from self.plugin.prepare_path(self.endpoint_desc,
                                                               self.session,
                                                               self.request_params,
@@ -104,7 +104,7 @@ class PathTest(TestCase):
         self.assertDictEqual(self.request_params, {'path_param2': 'bar'})
 
 
-class TimeoutTest(TestCase):
+class TimeoutTests(TestCase):
 
     def setUp(self):
 
@@ -167,7 +167,7 @@ class TimeoutTest(TestCase):
             yield from self.session.request()
 
 
-class TimeoutWithResponseTest(TestCase):
+class TimeoutWithResponseTests(TestCase):
 
     def setUp(self):
 
@@ -196,7 +196,7 @@ class TimeoutWithResponseTest(TestCase):
         self.assertEqual((yield from self.session.request()), 'response')
 
 
-class HeadersTest(TestCase):
+class HeadersTests(TestCase):
 
     def setUp(self):
         self.plugin = Headers(default_headers={'x-foo-bar': 'test headers'})
@@ -215,7 +215,7 @@ class HeadersTest(TestCase):
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
-                                                   'headers': {'X-FOO-BAR': 'test headers'}})
+                                                   'headers': {'X-Foo-Bar': 'test headers'}})
 
     @coroutine
     def test_use_service(self):
@@ -224,7 +224,7 @@ class HeadersTest(TestCase):
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
-                                                   'headers': {'X-FOO-BAR': 'test headers service_client'}})
+                                                   'headers': {'X-Foo-Bar': 'test headers service_client'}})
 
     @coroutine
     def test_add_from_service(self):
@@ -233,8 +233,8 @@ class HeadersTest(TestCase):
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
-                                                   'headers': {'X-FOO-BAR': 'test headers',
-                                                               'X-FOO-BAR-SERVICE': 'test headers service_client'}})
+                                                   'headers': {'X-Foo-Bar': 'test headers',
+                                                               'X-Foo-Bar-Service': 'test headers service_client'}})
 
     @coroutine
     def test_use_request(self):
@@ -244,7 +244,7 @@ class HeadersTest(TestCase):
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
-                                                   'headers': {'X-FOO-BAR': 'test headers request'}})
+                                                   'headers': {'X-Foo-Bar': 'test headers request'}})
 
     @coroutine
     def test_add_from_request(self):
@@ -254,9 +254,9 @@ class HeadersTest(TestCase):
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
                                                    'path_param2': 'bar',
-                                                   'headers': {'X-FOO-BAR': 'test headers',
-                                                               'X-FOO-BAR-SERVICE': 'test headers service_client',
-                                                               'X-FOO-BAR-REQUEST': 'test headers request'}})
+                                                   'headers': {'X-Foo-Bar': 'test headers',
+                                                               'X-Foo-Bar-Service': 'test headers service_client',
+                                                               'X-Foo-Bar-Request': 'test headers request'}})
 
 
 class QueryParamsTest(TestCase):
