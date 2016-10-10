@@ -126,6 +126,12 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.5.2
+------
+
+- Made compatible with aiohttp 1.0.x.
+- Simplified factory code.
+
 v0.5.1
 ------
 

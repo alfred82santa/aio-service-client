@@ -1,5 +1,5 @@
 from aiohttp.client_reqrep import ClientResponse
-from aiohttp.multidict import CIMultiDict
+from multidict import CIMultiDict
 from functools import wraps
 from asyncio import coroutine, get_event_loop
 from dirty_loader import LoaderNamespaceReversedCached
