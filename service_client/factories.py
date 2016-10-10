@@ -13,6 +13,7 @@ def load_spec_by_sepc_loader(spec_loader, loader):
 
 
 class ServiceClientFactory(BaseFactory):
+
     def __call__(self, spec=None, spec_loader=None, plugins=None,
                  parser=None, serializer=None, logger=None, **kwargs):
         if spec_loader:
@@ -20,7 +21,7 @@ class ServiceClientFactory(BaseFactory):
 
         try:
             plugins = self.iter_loaded_item_list(plugins, BasePlugin)
-        except TypeError: # pragma: no cover
+        except TypeError:  # pragma: no cover
             pass
 
         if isinstance(parser, str):
@@ -31,7 +32,7 @@ class ServiceClientFactory(BaseFactory):
 
         try:
             logger = self.load_item(logger, Logger)
-        except TypeError: # pragma: no cover
+        except TypeError:  # pragma: no cover
             pass
 
         return super(ServiceClientFactory, self).__call__(spec=spec, plugins=plugins, parser=parser,
@@ -39,10 +40,11 @@ class ServiceClientFactory(BaseFactory):
 
 
 class LoggerPluginFactory(BaseFactory):
+
     def __call__(self, logger, **kwargs):
         try:
             logger = self.load_item(logger, Logger)
-        except TypeError: # pragma: no cover
+        except TypeError:  # pragma: no cover
             pass
 
         return super(LoggerPluginFactory, self).__call__(logger=logger, **kwargs)
