@@ -5,7 +5,12 @@ from urllib.parse import urlparse, urlunsplit
 from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from aiohttp.connector import TCPConnector
+from yarl import URL
+
 from .utils import ObjectWrapper
+
+
+__version__ = '0.5.3'
 
 
 class ServiceClient:
@@ -49,7 +54,7 @@ class ServiceClient:
         request_params = kwargs
         session = yield from self.prepare_session(endpoint_desc, request_params)
 
-        request_params['url'] = yield from self.generate_path(endpoint_desc, session, request_params)
+        request_params['url'] = URL((yield from self.generate_path(endpoint_desc, session, request_params)))
         request_params['method'] = endpoint_desc.get('method', 'GET').upper()
 
         yield from self.prepare_request_params(endpoint_desc, session, request_params)

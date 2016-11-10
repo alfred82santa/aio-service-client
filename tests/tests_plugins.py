@@ -12,6 +12,8 @@ from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from multidict import CIMultiDict
 from asynctest.case import TestCase
+from yarl import URL
+
 from service_client.utils import ObjectWrapper
 from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
     TrackingToken, Pool
@@ -484,7 +486,7 @@ class TrackingTokenTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
+                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
                 response._post_init(this.loop)
                 return response
 
@@ -541,7 +543,7 @@ class InnerLogTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
+                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
                 response._post_init(this.loop)
                 response._content = b'ssssssss'
                 response.status = 200
@@ -758,7 +760,7 @@ class OuterLogTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
+                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
                 response._post_init(this.loop)
                 response._content = b'ssssssss'
                 response.status = 200
@@ -927,7 +929,7 @@ class PoolTest(TestCase):
 
             @coroutine
             def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', 'http://test.test'))
+                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
                 response._post_init(this.loop)
                 response._content = b'ssssssss'
                 response.status = 200
