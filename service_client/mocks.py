@@ -3,6 +3,8 @@ from multidict import CIMultiDict
 from functools import wraps
 from asyncio import coroutine, get_event_loop
 from dirty_loader import LoaderNamespaceReversedCached
+from yarl import URL
+
 from .plugins import BasePlugin
 
 
@@ -203,7 +205,7 @@ class BaseMock:
         self.url = url
         self.args = args
         self.kwargs = kwargs
-        self.response = ClientResponse(method, url)
+        self.response = ClientResponse(method, URL(url))
         self.response._post_init(self.loop)
         self.response.status = self.mock_desc.get('status', 200)
         self.response.headers = CIMultiDict(self.mock_desc.get('headers', {}))
