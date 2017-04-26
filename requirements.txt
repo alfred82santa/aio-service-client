@@ -1,3 +1,3 @@
 dirty-loader >= 0.2.2
 git+https://github.com/alfred82santa/configure.git
-aiohttp >= 1.1.2
+aiohttp >= 2.0.0
