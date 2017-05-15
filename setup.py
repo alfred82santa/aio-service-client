@@ -13,7 +13,7 @@ with open(path, 'r') as file:
 
         name = node.targets[0]
         if not isinstance(name, ast.Name) or \
-                        name.id not in ('__version__', '__version_info__', 'VERSION'):
+                name.id not in ('__version__', '__version_info__', 'VERSION'):
             continue
 
         v = node.value

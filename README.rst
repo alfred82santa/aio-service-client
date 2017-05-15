@@ -140,6 +140,8 @@ v0.6.0
 
 - Added new hook ``close`` in order to notify plugins that client is going to close.
 
+- Removed compatibility with Python 3.4.
+
 
 v0.5.4
 ------
