@@ -10,7 +10,7 @@ from yarl import URL
 
 from .utils import ObjectWrapper
 
-__version__ = '0.5.5'
+__version__ = '0.6.0'
 
 
 class ServiceClient:
