@@ -1,4 +1,3 @@
-from asyncio.coroutines import coroutine
 from asyncio.tasks import Task
 
 from aiohttp.client_reqrep import ClientResponse
@@ -11,64 +10,51 @@ from service_client.utils import ObjectWrapper
 
 
 class FakePlugin:
-
     def __init__(self):
         self.calls = {}
 
     def assign_service_client(self, *args, **kwargs):
         self.calls['assign_service_client'] = {'args': args, 'kwargs': kwargs}
 
-    @coroutine
     def prepare_response(self, *args, **kwargs):
         self.calls['prepare_response'] = {'args': args, 'kwargs': kwargs}
         self.session = kwargs['session']
 
-    @coroutine
-    def prepare_session(self, *args, **kwargs):
+    async def prepare_session(self, *args, **kwargs):
         self.calls['prepare_session'] = {'args': args, 'kwargs': kwargs}
         self.session = kwargs['session']
 
-    @coroutine
-    def prepare_path(self, *args, **kwargs):
+    async def prepare_path(self, *args, **kwargs):
         self.calls['prepare_path'] = {'args': args, 'kwargs': kwargs}
         return kwargs['path']
 
-    @coroutine
-    def prepare_request_params(self, *args, **kwargs):
+    async def prepare_request_params(self, *args, **kwargs):
         self.calls['prepare_request_params'] = {'args': args, 'kwargs': kwargs}
 
-    @coroutine
-    def prepare_payload(self, *args, **kwargs):
+    async def prepare_payload(self, *args, **kwargs):
         self.calls['prepare_payload'] = {'args': args, 'kwargs': kwargs}
         return kwargs['payload']
 
-    @coroutine
-    def before_request(self, *args, **kwargs):
+    async def before_request(self, *args, **kwargs):
         self.calls['before_request'] = {'args': args, 'kwargs': kwargs}
 
-    @coroutine
-    def on_exception(self, *args, **kwargs):
+    async def on_exception(self, *args, **kwargs):
         self.calls['on_exception'] = {'args': args, 'kwargs': kwargs}
 
-    @coroutine
-    def on_response(self, *args, **kwargs):
+    async def on_response(self, *args, **kwargs):
         self.calls['on_response'] = {'args': args, 'kwargs': kwargs}
 
-    @coroutine
-    def on_read(self, *args, **kwargs):
+    async def on_read(self, *args, **kwargs):
         self.calls['on_read'] = {'args': args, 'kwargs': kwargs}
 
-    @coroutine
-    def on_parse_exception(self, *args, **kwargs):
+    async def on_parse_exception(self, *args, **kwargs):
         self.calls['on_parse_exception'] = {'args': args, 'kwargs': kwargs}
 
-    @coroutine
-    def on_parsed_response(self, *args, **kwargs):
+    async def on_parsed_response(self, *args, **kwargs):
         self.calls['on_parsed_response'] = {'args': args, 'kwargs': kwargs}
 
 
 class ServiceBasicTest(TestCase):
-
     @patch('service_client.ClientSession')
     def setUp(self, mock_session):
         self.mock_session = mock_session
@@ -110,8 +96,7 @@ class ServiceBasicTest(TestCase):
         pass
 
     def _mock_session(self):
-        @coroutine
-        def request(*args, **kwargs):
+        async def request(*args, **kwargs):
             self.request = {'args': args, 'kwargs': kwargs}
             self.response = ClientResponse('get', URL('http://test.test'))
             self.response._post_init(self.loop)
@@ -121,15 +106,14 @@ class ServiceBasicTest(TestCase):
         self.mock_session.request.side_effect = request
         self.mock_session.return_value = self.mock_session
 
-    @coroutine
-    def test_workflow_get(self):
-        response = yield from self.service_client.call('testService1')
+    async def test_workflow_get(self):
+        response = await self.service_client.call('testService1')
         self.assertEqual(response, self.response)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                             'kwargs'], {'service_client': self.service_client})
+                                 'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -209,16 +193,14 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
-    @coroutine
-    def test_workflow_post(self):
-
-        response = yield from self.service_client.call('testService2', payload='aaaa')
+    async def test_workflow_post(self):
+        response = await self.service_client.call('testService2', payload='aaaa')
         self.assertEqual(response, self.response)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                             'kwargs'], {'service_client': self.service_client})
+                                 'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -307,15 +289,14 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
-    @coroutine
-    def test_workflow_post_direct_call(self):
-        response = yield from self.service_client.testService2(payload='aaaa')
+    async def test_workflow_post_direct_call(self):
+        response = await self.service_client.testService2(payload='aaaa')
         self.assertEqual(response, self.response)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-            'kwargs'], {'service_client': self.service_client})
+                                 'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -404,11 +385,8 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
-    @coroutine
-    def test_workflow_post_exception_response(self):
-
-        @coroutine
-        def request(*args, **kwargs):
+    async def test_workflow_post_exception_response(self):
+        async def request(*args, **kwargs):
             self.request = {'args': args, 'kwargs': kwargs}
             self.ex = Exception()
             raise self.ex
@@ -416,14 +394,14 @@ class ServiceBasicTest(TestCase):
         self.mock_session.request.side_effect = request
 
         with self.assertRaises(Exception) as ex:
-            yield from self.service_client.call('testService2', payload='aaaa')
+            await self.service_client.call('testService2', payload='aaaa')
 
         self.assertEqual(self.ex, ex.exception)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                             'kwargs'], {'service_client': self.service_client})
+                                 'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -499,9 +477,7 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_parsed_response', self.plugin.calls, "On parsed response call")
         self.assertNotIn('on_parse_exception', self.plugin.calls, "On parse exception call")
 
-    @coroutine
-    def test_workflow_post_exception_parser(self):
-
+    async def test_workflow_post_exception_parser(self):
         def parse(data, *args, **kwargs):
             self.ex = Exception()
             raise self.ex
@@ -509,13 +485,13 @@ class ServiceBasicTest(TestCase):
         self.service_client.parser = parse
 
         with self.assertRaises(Exception) as ex:
-            yield from self.service_client.call('testService2', payload='aaaa')
+            await self.service_client.call('testService2', payload='aaaa')
         self.assertEqual(self.ex, ex.exception)
 
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                             'kwargs'], {'service_client': self.service_client})
+                                 'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -603,30 +579,26 @@ class ServiceBasicTest(TestCase):
         self.assertNotIn('on_exception', self.plugin.calls, "On exception call")
         self.assertNotIn('on_parsed_response', self.plugin.calls, "On parse response call")
 
-    @coroutine
-    def test_workflow_stream_response(self):
+    async def test_workflow_stream_response(self):
         def parse(data, *args, **kwargs):
             self.ex = Exception()
             raise self.ex
 
         self.service_client.parser = parse
 
-        response = yield from self.service_client.call('testService4', payload='aaaa')
+        response = await self.service_client.call('testService4', payload='aaaa')
         self.assertFalse(hasattr(response, 'data'))
 
-    @coroutine
-    def test_workflow_stream_request(self):
-
+    async def test_workflow_stream_request(self):
         def serializer(data, *args, **kwargs):
             self.ex = Exception()
             raise self.ex
 
         self.service_client.serializer = serializer
 
-        yield from self.service_client.call('testService5', payload='aaaa')
+        await self.service_client.call('testService5', payload='aaaa')
 
-    @coroutine
-    def test_create_response(self):
+    async def test_create_response(self):
         task = Task.current_task(loop=self.loop)
         task.session = {}
         task.endpoint_desc = {}

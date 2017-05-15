@@ -1,8 +1,9 @@
+from asyncio import get_event_loop
+
 from aiohttp.client_reqrep import ClientResponse
-from multidict import CIMultiDict
-from functools import wraps
-from asyncio import coroutine, get_event_loop
 from dirty_loader import LoaderNamespaceReversedCached
+from functools import wraps
+from multidict import CIMultiDict
 from yarl import URL
 
 from .plugins import BasePlugin
@@ -13,7 +14,6 @@ class NoMock(Exception):
 
 
 class BaseMockDefinition:
-
     def __init__(self, mock_manager, service_name=None, endpoint=None, offset=0, limit=1):
         self.mock_manager = mock_manager
         self.service_name = service_name
@@ -23,10 +23,9 @@ class BaseMockDefinition:
 
     def __call__(self, func):
         @wraps(func)
-        @coroutine
-        def inner(*args, **kwargs):
+        async def inner(*args, **kwargs):
             with self:
-                yield from func(*args, **kwargs)
+                await func(*args, **kwargs)
 
         return inner
 
@@ -38,21 +37,18 @@ class BaseMockDefinition:
 
 
 class PatchMockDescDefinition(BaseMockDefinition):
-
     def __init__(self, patch, *args, **kwargs):
         super(PatchMockDescDefinition, self).__init__(*args, **kwargs)
         self.patch = patch
 
 
 class UseMockDefinition(BaseMockDefinition):
-
     def __init__(self, mock, *args, **kwargs):
         super(UseMockDefinition, self).__init__(*args, **kwargs)
         self.mock = mock
 
 
 class MockManager:
-
     def __init__(self):
         self.mocks = []
 
@@ -133,7 +129,6 @@ mock_manager = MockManager()
 
 
 class Mock(BasePlugin):
-
     def __init__(self, namespaces=None):
 
         self.loader = LoaderNamespaceReversedCached()
@@ -163,8 +158,7 @@ class Mock(BasePlugin):
                                    request_params, mock_desc,
                                    loop=loop)
 
-    @coroutine
-    def prepare_session(self, endpoint_desc, session, request_params):
+    async def prepare_session(self, endpoint_desc, session, request_params):
         mock_desc = endpoint_desc.get('mock', {})
         session.override_attr('request', self._create_mock(endpoint_desc,
                                                            session,
@@ -179,7 +173,6 @@ class Mock(BasePlugin):
 
 
 class BaseMock:
-
     def __init__(self, endpoint_desc, session, request_params,
                  mock_desc, loop=None):
         self.endpoint_desc = endpoint_desc
@@ -188,8 +181,7 @@ class BaseMock:
         self.mock_desc = mock_desc
         self.loop = loop or get_event_loop()
 
-    @coroutine
-    def __call__(self, *args, **kwargs):
+    async def __call__(self, *args, **kwargs):
         args = list(args)
         try:
             method = kwargs['method']
@@ -210,20 +202,17 @@ class BaseMock:
         self.response.status = self.mock_desc.get('status', 200)
         self.response.headers = CIMultiDict(self.mock_desc.get('headers', {}))
 
-        yield from self.prepare_response()
+        await self.prepare_response()
 
         return self.response
 
 
 class BaseFileMock(BaseMock):
-
-    @coroutine
-    def prepare_response(self):
+    async def prepare_response(self):
         filename = self.mock_desc['file']
         self.response._content = self.load_file(filename)
 
 
 class RawFileMock(BaseFileMock):
-
     def load_file(self, filename):
         return open(filename, "rb").read()

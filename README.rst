@@ -82,7 +82,7 @@ communicate with this service API defining its endpoint:
             "update_user": {"path": "/user/{user_id}",
                             "method": "put"}}
 
-Imagine you are using a Rest JSON API in order to manage users. So, you data must be sent
+Imagine you are using a Rest JSON API in order to manage users. So, your data must be sent
 as a JSON and response must be a JSON string. It mean you must serialize every request payload
 to a JSON, and parse every response as JSON. So, you only need to define JSON parser and serializer
 for your service:
@@ -125,6 +125,22 @@ In order to send a payload you must use ``payload`` keyword on call:
 
 Changelog
 =========
+
+v0.6.0
+------
+
+- Improved Pool plugin. It now allows to set hard limit of pending requests, if it reach limit requests will
+  fail raising :class:`RequestLimitError`. In same way, it allows to set a timeout, in seconds, for pending requests and
+  it will raise same exception.
+
+- Added new RateLimit plugin. It is similar to Pool plugin but using a period parameter, in seconds, in order to limit number
+  of request in this period.
+
+- Improved error logging.
+
+- Added new hook ``close`` in order to notify plugins that client is going to close.
+
+- Removed compatibility with Python 3.4.
 
 
 v0.5.4
@@ -204,14 +220,14 @@ It allows to define default headers, endpoint headers and request headers.
 .. code-block:: python
 
     service = ServiceClient(spec={"endpoint1": {"method": "get",
-                                                "path": "/endpoint/{placeholder1}/{placeholder2}",
+                                                "path": "/endpoint/foo/bar",
                                                 "headers": {"X-fake-header": "header; data"}}},
                             plugins=[Headers(headers={"content-type": "application/json"})],
                             base_path="http://example.com")
 
     resp = yield from service.call("endpoint1", headers={"X-other-fake-header": "foo"})
     # It will make request:
-    # GET http://example.com/endpoint/21/foo
+    # GET http://example.com/endpoint/foo/bar
     # X-fake-header: header; data
     # content-type: application/json
     # X-other-fake-header: foo
@@ -245,3 +261,15 @@ OuterLogger
 -----------
 
 It allows to log request before serialize and response after parse.
+
+Pool
+----
+
+It allows to limit concurrent requests. Besides it allows to set a hard limit of pending requests and a timeout
+for blocked ones.
+
+RateLimit
+---------
+
+It allows to limit number of requests in a time period. Besides it allows to set a hard limit of
+pending requests and a timeout for blocked ones.

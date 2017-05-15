@@ -6,7 +6,7 @@ from . import ServiceClient
 from .plugins import BasePlugin, BaseLogger
 
 
-def load_spec_by_sepc_loader(spec_loader, loader):
+def load_spec_by_spec_loader(spec_loader, loader):
     loader_class, params = instance_params(spec_loader)
     loader = loader.load_class(loader_class)
     return loader(**params)
@@ -17,7 +17,7 @@ class ServiceClientFactory(BaseFactory):
     def __call__(self, spec=None, spec_loader=None, plugins=None,
                  parser=None, serializer=None, logger=None, **kwargs):
         if spec_loader:
-            spec = load_spec_by_sepc_loader(spec_loader, self.loader)
+            spec = load_spec_by_spec_loader(spec_loader, self.loader)
 
         try:
             plugins = self.iter_loaded_item_list(plugins, BasePlugin)

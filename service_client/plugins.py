@@ -1,17 +1,17 @@
-import weakref
 import logging
-from asyncio import coroutine, Future
-from functools import wraps
+from asyncio import wait_for, TimeoutError
 from datetime import datetime
 from urllib.parse import quote_plus
+
+import weakref
 from aiohttp.helpers import Timeout as TimeoutContext
+from functools import wraps
 from multidict import CIMultiDict
 
 from service_client.utils import IncompleteFormatter, random_token
 
 
 class BasePlugin:
-
     def assign_service_client(self, service_client):
         self.service_client = service_client
 
@@ -25,12 +25,10 @@ class BasePlugin:
 
 
 class PathTokens(BasePlugin):
-
     def __init__(self, default_tokens=None):
         self.default_token = default_tokens or {}
 
-    @coroutine
-    def prepare_path(self, endpoint_desc, session, request_params, path):
+    async def prepare_path(self, endpoint_desc, session, request_params, path):
         tokens = self.default_token.copy()
         try:
             tokens.update(endpoint_desc['path_tokens'])
@@ -48,15 +46,11 @@ class PathTokens(BasePlugin):
 
 
 class Headers(BasePlugin):
-
     def __init__(self, default_headers=None):
         self.default_headers = default_headers.copy() if default_headers else {}
 
-    @coroutine
-    def prepare_request_params(self, endpoint_desc, session, request_params):
-        headers = request_params.get('headers', CIMultiDict()).copy()
-        if not isinstance(headers, CIMultiDict):
-            headers = CIMultiDict(headers)
+    async def prepare_request_params(self, endpoint_desc, session, request_params):
+        headers = CIMultiDict()
         headers.update(self.default_headers)
         headers.update(endpoint_desc.get('headers', {}))
         headers.update(request_params.get('headers', {}))
@@ -64,12 +58,10 @@ class Headers(BasePlugin):
 
 
 class Timeout(BasePlugin):
-
     def __init__(self, default_timeout=None):
         self.default_timeout = default_timeout
 
-    @coroutine
-    def before_request(self, endpoint_desc, session, request_params):
+    async def before_request(self, endpoint_desc, session, request_params):
         try:
             timeout = request_params.pop('timeout')
         except KeyError:
@@ -79,11 +71,10 @@ class Timeout(BasePlugin):
             return
 
         def decorator(func):
-            @coroutine
             @wraps(func)
-            def request_wrapper(*args, **kwargs):
+            async def request_wrapper(*args, **kwargs):
                 with TimeoutContext(timeout=timeout):
-                    return (yield from func(*args, **kwargs))
+                    return (await func(*args, **kwargs))
 
             return request_wrapper
 
@@ -92,7 +83,6 @@ class Timeout(BasePlugin):
 
 
 class Elapsed(BasePlugin):
-
     def __init__(self, headers=True, read=True, parse=True):
         self.headers = headers
         self.read = read
@@ -115,11 +105,10 @@ class Elapsed(BasePlugin):
     def prepare_response(self, endpoint_desc, session, request_params, response):
 
         def decorator(func):
-            @coroutine
             @wraps(func)
-            def start_wrapper(*args, **kwargs):
+            async def start_wrapper(*args, **kwargs):
                 response.start_headers = datetime.now()
-                r = yield from func(*args, **kwargs)
+                r = await func(*args, **kwargs)
                 response.headers_elapsed = datetime.now() - response.start_headers
                 return r
 
@@ -128,13 +117,11 @@ class Elapsed(BasePlugin):
         if self._elapsed_enabled('headers', endpoint_desc, session, request_params):
             response.decorate_attr('start', decorator)
 
-    @coroutine
-    def on_response(self, endpoint_desc, session, request_params, response):
+    async def on_response(self, endpoint_desc, session, request_params, response):
         if self._elapsed_enabled('read', endpoint_desc, session, request_params):
             response.start_read = datetime.now()
 
-    @coroutine
-    def on_read(self, endpoint_desc, session, request_params, response):
+    async def on_read(self, endpoint_desc, session, request_params, response):
         try:
             response.read_elapsed = datetime.now() - response.start_read
         except AttributeError:
@@ -143,8 +130,7 @@ class Elapsed(BasePlugin):
         if self._elapsed_enabled('parse', endpoint_desc, session, request_params):
             response.start_parse = datetime.now()
 
-    @coroutine
-    def on_parsed_response(self, endpoint_desc, session, request_params, response):
+    async def on_parsed_response(self, endpoint_desc, session, request_params, response):
         try:
             response.parse_elapsed = datetime.now() - response.start_parse
         except AttributeError:
@@ -152,13 +138,11 @@ class Elapsed(BasePlugin):
 
 
 class TrackingToken(BasePlugin):
-
     def __init__(self, prefix='', length=10):
         self.prefix = prefix
         self.length = length
 
-    @coroutine
-    def prepare_session(self, endpoint_desc, session, request_params):
+    async def prepare_session(self, endpoint_desc, session, request_params):
         try:
             tracking_token = request_params.pop('tracking_token')
         except KeyError:
@@ -171,22 +155,25 @@ class TrackingToken(BasePlugin):
 
         session.tracking_token = prefix + tracking_token
 
-    @coroutine
-    def on_response(self, endpoint_desc, session, request_params, response):
+    async def on_response(self, endpoint_desc, session, request_params, response):
         response.tracking_token = session.tracking_token
 
 
 class QueryParams(BasePlugin):
+    def __init__(self, default_query_params=None):
+        self.default_query_params = default_query_params
 
-    @coroutine
-    def prepare_request_params(self, endpoint_desc, session, request_params):
-        query_params = endpoint_desc.get('query_params', {}).copy()
+    async def prepare_request_params(self, endpoint_desc, session, request_params):
+        try:
+            query_params = self.default_query_params.copy()
+        except AttributeError:
+            query_params = {}
+        query_params.update(endpoint_desc.get('query_params', {}))
         query_params.update(request_params.get('params', {}))
-        request_params['params'] = query_params
+        request_params['params'] = {k: v for k, v in query_params.items() if v is not None}
 
 
 class BaseLogger(BasePlugin):
-
     def __init__(self, logger, max_body_length=0, level=logging.INFO,
                  on_exception_level=logging.CRITICAL,
                  on_parse_exception_level=logging.CRITICAL):
@@ -208,14 +195,12 @@ class BaseLogger(BasePlugin):
 
         return log_data
 
-    @coroutine
-    def _prepare_request_log_record(self, endpoint_desc, session, request_params):
+    async def _prepare_request_log_record(self, endpoint_desc, session, request_params):
         log_data = self._prepare_record(endpoint_desc, session, request_params)
         log_data['action'] = 'REQUEST'
         return log_data
 
-    @coroutine
-    def _prepare_response_log_record(self, endpoint_desc, session, request_params, response):
+    async def _prepare_response_log_record(self, endpoint_desc, session, request_params, response):
         log_data = self._prepare_record(endpoint_desc, session, request_params)
         log_data['action'] = 'RESPONSE'
         log_data['status_code'] = response.status
@@ -235,7 +220,7 @@ class BaseLogger(BasePlugin):
             try:
                 log_data['body'] = self._prepare_body(response.data)
             except AttributeError:
-                log_data['body'] = self._prepare_body((yield from response.text()))
+                log_data['body'] = self._prepare_body((await response.text()))
 
         return log_data
 
@@ -243,37 +228,31 @@ class BaseLogger(BasePlugin):
         log_data['action'] = 'EXCEPTION'
         log_data['exception'] = ex
 
-    @coroutine
-    def _prepare_parse_response_exception_log_record(self, endpoint_desc, session, request_params, response, ex):
-        log_data = yield from self._prepare_response_log_record(endpoint_desc, session, request_params, response)
+    async def _prepare_parse_response_exception_log_record(self, endpoint_desc, session, request_params, response, ex):
+        log_data = await self._prepare_response_log_record(endpoint_desc, session, request_params, response)
         self._prepare_exception(log_data, ex)
 
         return log_data
 
-    @coroutine
-    def _prepare_exception_log_record(self, endpoint_desc, session, request_params, ex):
+    async def _prepare_exception_log_record(self, endpoint_desc, session, request_params, ex):
         log_data = self._prepare_record(endpoint_desc, session, request_params)
         self._prepare_exception(log_data, ex)
 
         return log_data
 
-    @coroutine
-    def on_exception(self, endpoint_desc, session, request_params, ex):
-        log_data = yield from self._prepare_exception_log_record(endpoint_desc, session, request_params, ex)
+    async def on_exception(self, endpoint_desc, session, request_params, ex):
+        log_data = await self._prepare_exception_log_record(endpoint_desc, session, request_params, ex)
         self.logger.log(self.on_exception_level, str(ex), extra=log_data)
 
-    @coroutine
-    def on_parse_exception(self, endpoint_desc, session, request_params, response, ex):
-        log_data = yield from self._prepare_parse_response_exception_log_record(endpoint_desc, session,
-                                                                                request_params, response, ex)
+    async def on_parse_exception(self, endpoint_desc, session, request_params, response, ex):
+        log_data = await self._prepare_parse_response_exception_log_record(endpoint_desc, session,
+                                                                           request_params, response, ex)
         self.logger.log(self.on_parse_exception_level, str(ex), extra=log_data)
 
 
 class InnerLogger(BaseLogger):
-
-    @coroutine
-    def _prepare_on_request_log_record(self, endpoint_desc, session, request_params):
-        log_data = yield from self._prepare_request_log_record(endpoint_desc, session, request_params)
+    async def _prepare_on_request_log_record(self, endpoint_desc, session, request_params):
+        log_data = await self._prepare_request_log_record(endpoint_desc, session, request_params)
 
         if endpoint_desc.get('logger', {}).get('hidden_request_body', False):
             log_data['body'] = '<HIDDEN>'
@@ -293,22 +272,18 @@ class InnerLogger(BaseLogger):
 
         return log_data
 
-    @coroutine
-    def before_request(self, endpoint_desc, session, request_params):
-        log_data = yield from self._prepare_on_request_log_record(endpoint_desc, session, request_params)
+    async def before_request(self, endpoint_desc, session, request_params):
+        log_data = await self._prepare_on_request_log_record(endpoint_desc, session, request_params)
         self.logger.log(self.level, "Sending request", extra=log_data)
 
-    @coroutine
-    def on_response(self, endpoint_desc, session, request_params, response):
-        log_data = yield from self._prepare_response_log_record(endpoint_desc, session, request_params, response)
+    async def on_response(self, endpoint_desc, session, request_params, response):
+        log_data = await self._prepare_response_log_record(endpoint_desc, session, request_params, response)
         self.logger.log(self.level, "Response received", extra=log_data)
 
 
 class OuterLogger(BaseLogger):
-
-    @coroutine
-    def _prepare_prepare_payload_log_record(self, endpoint_desc, session, request_params, payload):
-        log_data = yield from self._prepare_request_log_record(endpoint_desc, session, request_params)
+    async def _prepare_prepare_payload_log_record(self, endpoint_desc, session, request_params, payload):
+        log_data = await self._prepare_request_log_record(endpoint_desc, session, request_params)
 
         if endpoint_desc.get('logger', {}).get('hidden_request_body', False):
             log_data['body'] = '<HIDDEN>'
@@ -321,51 +296,90 @@ class OuterLogger(BaseLogger):
 
         return log_data
 
-    @coroutine
-    def prepare_payload(self, endpoint_desc, session, request_params, payload):
-        log_data = yield from self._prepare_prepare_payload_log_record(endpoint_desc, session,
-                                                                       request_params, payload)
+    async def prepare_payload(self, endpoint_desc, session, request_params, payload):
+        log_data = await self._prepare_prepare_payload_log_record(endpoint_desc, session,
+                                                                  request_params, payload)
         self.logger.log(self.level, "Sending request", extra=log_data)
 
-    @coroutine
-    def on_parsed_response(self, endpoint_desc, session, request_params, response):
-        log_data = yield from self._prepare_response_log_record(endpoint_desc, session, request_params, response)
+    async def on_parsed_response(self, endpoint_desc, session, request_params, response):
+        log_data = await self._prepare_response_log_record(endpoint_desc, session, request_params, response)
         self.logger.log(self.level, "Response received", extra=log_data)
 
 
-class Pool(BasePlugin):
+class RequestLimitError(Exception):
+    pass
 
-    def __init__(self, limit=1):
+
+class BaseLimitPlugin(BasePlugin):
+    def __init__(self, limit=1, timeout=None, hard_limit=None):
         self.limit = limit
-        self._waiters = []
-        self._acquired = 0
+        self._counter = 0
+        self._fut = None
+        self._pending = 0
+        self._timeout = timeout
+        self._hard_limit = hard_limit
 
-    def _acquire(self):
-        self._acquired += 1
+    @property
+    def pending(self):
+        return self._pending
 
-    def _release(self):
-        self._acquired -= 1
-        while self._acquired < self.limit:
-            try:
-                fut = self._waiters.pop()
-                fut.set_result(None)
-                self._acquire()
-            except IndexError:  # pragma: no cover
+    async def _acquire(self):
+        timeout = self._timeout
+        while True:
+            if self._counter < self.limit:
+                self._counter += 1
                 break
 
-    @coroutine
-    def before_request(self, endpoint_desc, session, request_params):
-        if self._acquired >= self.limit:
-            fut = Future(loop=self.service_client.loop)
-            self._waiters.append(fut)
-            yield from fut
-        else:
-            self._acquire()
+            if self._hard_limit is not None and self._hard_limit < self.pending:
+                raise RequestLimitError("Too many requests pending")
 
-    @coroutine
-    def on_response(self, endpoint_desc, session, request_params, response):
+            if self._fut is None:
+                self._fut = self.service_client.loop.create_future()
+            self._pending += 1
+
+            try:
+                now = self.service_client.loop.time()
+                await wait_for(self._fut, timeout=timeout, loop=self.service_client.loop)
+                if timeout is not None:
+                    timeout -= self.service_client.loop.time() - now
+                    if timeout <= 0:
+                        raise TimeoutError()
+            except TimeoutError:
+                raise RequestLimitError("Request blocked too much time")
+            finally:
+                self._pending -= 1
+
+    def _release(self):
+        self._counter -= 1
+        if self._fut is not None:
+            self._fut.set_result(None)
+
+    async def before_request(self, endpoint_desc, session, request_params):
+        await self._acquire()
+
+    def close(self):
+        if self._fut is not None:
+            from service_client import ConnectionClosedError
+            self._fut.set_exception(ConnectionClosedError('Connection closed'))
+
+
+class Pool(BaseLimitPlugin):
+    async def on_response(self, endpoint_desc, session, request_params, response):
         self._release()
 
-    @coroutine
-    def on_exception(self, endpoint_desc, session, request_params, ex):
-        self._release()
+    async def on_exception(self, endpoint_desc, session, request_params, ex):
+        if not isinstance(ex, RequestLimitError):
+            self._release()
+
+
+class RateLimit(BaseLimitPlugin):
+    def __init__(self, period=1, *args, **kwargs):
+        super(RateLimit, self).__init__(*args, **kwargs)
+        self.period = period
+
+    async def on_response(self, endpoint_desc, session, request_params, response):
+        self.service_client.loop.call_later(self.period, self._release)
+
+    async def on_exception(self, endpoint_desc, session, request_params, ex):
+        if not isinstance(ex, RequestLimitError):
+            self.service_client.loop.call_later(self.period, self._release)

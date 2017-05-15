@@ -1,7 +1,7 @@
 import ast
 
-from setuptools import setup
 import os
+from setuptools import setup
 
 path = os.path.join(os.path.dirname(__file__), 'service_client', '__init__.py')
 
@@ -42,6 +42,7 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
         'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
         'Development Status :: 4 - Beta'],
     packages=['service_client'],
