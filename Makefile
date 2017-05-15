@@ -22,14 +22,12 @@ requirements:
 	@echo "Installing ${PACKAGE_NAME} requirements..."
 	pip install -r requirements.txt
 
-requirements-test:
+requirements-test: requirements
 	@echo "Installing ${PACKAGE_NAME} tests requirements..."
-	@make requirements
 	pip install -r requirements-test.txt
 
-requirements-docs:
+requirements-docs: requirements
 	@echo "Installing ${PACKAGE_NAME} docs requirements..."
-	@make requirements
 	pip install -r requirements-docs.txt
 
 run-tests:
@@ -52,10 +50,6 @@ flake:
 autopep:
 	autopep8 --max-line-length 120 -r -j 8 -i .
 
-prepush:
-	@make flake
-	@make run-tests
+prepush: flake run-tests
 
-pull-request:
-	@make flake
-	@make run-tests
+pull-request: flake run-tests

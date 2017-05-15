@@ -1,12 +1,11 @@
 import weakref
 import logging
-from asyncio import coroutine, Future
+from asyncio import coroutine, wait_for, TimeoutError
 from functools import wraps
 from datetime import datetime
 from urllib.parse import quote_plus
 from aiohttp.helpers import Timeout as TimeoutContext
 from multidict import CIMultiDict
-
 from service_client.utils import IncompleteFormatter, random_token
 
 
@@ -54,9 +53,7 @@ class Headers(BasePlugin):
 
     @coroutine
     def prepare_request_params(self, endpoint_desc, session, request_params):
-        headers = request_params.get('headers', CIMultiDict()).copy()
-        if not isinstance(headers, CIMultiDict):
-            headers = CIMultiDict(headers)
+        headers = CIMultiDict()
         headers.update(self.default_headers)
         headers.update(endpoint_desc.get('headers', {}))
         headers.update(request_params.get('headers', {}))
@@ -178,11 +175,18 @@ class TrackingToken(BasePlugin):
 
 class QueryParams(BasePlugin):
 
+    def __init__(self, default_query_params=None):
+        self.default_query_params = default_query_params
+
     @coroutine
     def prepare_request_params(self, endpoint_desc, session, request_params):
-        query_params = endpoint_desc.get('query_params', {}).copy()
+        try:
+            query_params = self.default_query_params.copy()
+        except AttributeError:
+            query_params = {}
+        query_params.update(endpoint_desc.get('query_params', {}))
         query_params.update(request_params.get('params', {}))
-        request_params['params'] = query_params
+        request_params['params'] = {k: v for k, v in query_params.items() if v is not None}
 
 
 class BaseLogger(BasePlugin):
@@ -333,34 +337,67 @@ class OuterLogger(BaseLogger):
         self.logger.log(self.level, "Response received", extra=log_data)
 
 
-class Pool(BasePlugin):
+class RequestLimitError(Exception):
+    pass
 
-    def __init__(self, limit=1):
+
+class BaseLimitPlugin(BasePlugin):
+
+    def __init__(self, limit=1, timeout=None, hard_limit=None):
         self.limit = limit
-        self._waiters = []
-        self._acquired = 0
+        self._counter = 0
+        self._fut = None
+        self._pending = 0
+        self._timeout = timeout
+        self._hard_limit = hard_limit
 
+    @property
+    def pending(self):
+        return self._pending
+
+    @coroutine
     def _acquire(self):
-        self._acquired += 1
+        timeout = self._timeout
+        while True:
+            if self._counter < self.limit:
+                self._counter += 1
+                break
+
+            if self._hard_limit is not None and self._hard_limit < self.pending:
+                raise RequestLimitError("Too many requests pending")
+
+            if self._fut is None:
+                self._fut = self.service_client.loop.create_future()
+            self._pending += 1
+
+            try:
+                now = self.service_client.loop.time()
+                yield from wait_for(self._fut, timeout=timeout, loop=self.service_client.loop)
+                if timeout is not None:
+                    timeout -= self.service_client.loop.time() - now
+                    if timeout <= 0:
+                        raise TimeoutError()
+            except TimeoutError:
+                raise RequestLimitError("Request blocked too much time")
+            finally:
+                self._pending -= 1
 
     def _release(self):
-        self._acquired -= 1
-        while self._acquired < self.limit:
-            try:
-                fut = self._waiters.pop()
-                fut.set_result(None)
-                self._acquire()
-            except IndexError:  # pragma: no cover
-                break
+        self._counter -= 1
+        if self._fut is not None:
+            self._fut.set_result(None)
 
     @coroutine
     def before_request(self, endpoint_desc, session, request_params):
-        if self._acquired >= self.limit:
-            fut = Future(loop=self.service_client.loop)
-            self._waiters.append(fut)
-            yield from fut
-        else:
-            self._acquire()
+        yield from self._acquire()
+
+    def close(self):
+        if self._fut is not None:
+            from service_client import ConnectionClosedError
+            self._fut.set_exception(ConnectionClosedError('Connection closed'))
+
+
+class Pool(BaseLimitPlugin):
 
     @coroutine
     def on_response(self, endpoint_desc, session, request_params, response):
@@ -368,4 +405,21 @@ class Pool(BasePlugin):
 
     @coroutine
     def on_exception(self, endpoint_desc, session, request_params, ex):
-        self._release()
+        if not isinstance(ex, RequestLimitError):
+            self._release()
+
+
+class RateLimit(BaseLimitPlugin):
+
+    def __init__(self, period=1, *args, **kwargs):
+        super(RateLimit, self).__init__(*args, **kwargs)
+        self.period = period
+
+    @coroutine
+    def on_response(self, endpoint_desc, session, request_params, response):
+        self.service_client.loop.call_later(self.limit, self._release)
+
+    @coroutine
+    def on_exception(self, endpoint_desc, session, request_params, ex):
+        if not isinstance(ex, RequestLimitError):
+            self.service_client.loop.call_later(self.limit, self._release)

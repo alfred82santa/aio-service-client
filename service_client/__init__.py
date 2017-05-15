@@ -2,6 +2,7 @@ import logging
 from asyncio import coroutine, get_event_loop
 from asyncio.tasks import Task
 from urllib.parse import urlparse, urlunsplit
+
 from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
 from aiohttp.connector import TCPConnector
@@ -9,12 +10,10 @@ from yarl import URL
 
 from .utils import ObjectWrapper
 
-
-__version__ = '0.5.4'
+__version__ = '0.5.5'
 
 
 class ServiceClient:
-
     def __init__(self, name='GenericService', spec=None, plugins=None, config=None,
                  parser=None, serializer=None, base_path='', loop=None, logger=None):
         self._plugins = []
@@ -133,8 +132,13 @@ class ServiceClient:
                  if hasattr(plugin, 'prepare_path')]
         self.logger.debug("Calling {0} plugin hooks...".format('prepare_path'))
         for func in hooks:
-            path = yield from func(endpoint_desc=endpoint_desc, session=session,
-                                   request_params=request_params, path=path)
+            try:
+                path = yield from func(endpoint_desc=endpoint_desc, session=session,
+                                       request_params=request_params, path=path)
+            except Exception as ex:  # pragma: no cover
+                self.logger.error("Exception executing {0}".format(repr(func)))
+                self.logger.exception(ex)
+                raise
 
         return path
 
@@ -149,8 +153,13 @@ class ServiceClient:
                  if hasattr(plugin, 'prepare_payload')]
         self.logger.debug("Calling {0} plugin hooks...".format('prepare_payload'))
         for func in hooks:
-            payload = yield from func(endpoint_desc=endpoint_desc, session=session,
-                                      request_params=request_params, payload=payload)
+            try:
+                payload = yield from func(endpoint_desc=endpoint_desc, session=session,
+                                          request_params=request_params, payload=payload)
+            except Exception as ex:  # pragma: no cover
+                self.logger.error("Exception executing {0}".format(repr(func)))
+                self.logger.exception(ex)
+                raise
         return payload
 
     @coroutine
@@ -188,31 +197,49 @@ class ServiceClient:
         hooks = [getattr(plugin, hook) for plugin in self._plugins if hasattr(plugin, hook)]
         self.logger.debug("Calling {0} plugin hooks...".format(hook))
         for func in hooks:
-            yield from func(*args, **kwargs)
+            try:
+                yield from func(*args, **kwargs)
+            except Exception as ex:  # pragma: no cover
+                self.logger.error("Exception executing {0}".format(repr(func)))
+                self.logger.exception(ex)
+                raise
 
     def _execute_plugin_hooks_sync(self, hook, *args, **kwargs):
-        hooks = [getattr(plugin, hook) for plugin in self._plugins if hasattr(plugin, hook)]
+        self._execute_plugin_hooks_sync_base(self._plugins, hook, *args, **kwargs)
+
+    def _execute_plugin_hooks_sync_base(self, plugins, hook, *args, **kwargs):
+        hooks = [getattr(plugin, hook) for plugin in plugins if hasattr(plugin, hook)]
         self.logger.debug("Calling {0} plugin hooks...".format(hook))
         for func in hooks:
-            func(*args, **kwargs)
+            try:
+                func(*args, **kwargs)
+            except Exception as ex:  # pragma: no cover
+                self.logger.error("Exception executing {0}".format(repr(func)))
+                self.logger.exception(ex)
+                raise
 
     def add_plugins(self, plugins):
         self._plugins.extend(plugins)
-
-        hook = 'assign_service_client'
-        hooks = [getattr(plugin, hook) for plugin in self._plugins if hasattr(plugin, hook)]
-        self.logger.debug("Calling {0} plugin hooks...".format(hook))
-        for func in hooks:
-            func(service_client=self)
+        self._execute_plugin_hooks_sync_base(plugins, 'assign_service_client', service_client=self)
 
     def __getattr__(self, item):
 
         @coroutine
         def wrap(*args, **kwargs):
-
             return self.call(item, *args, **kwargs)
 
         return wrap
 
-    def __del__(self):  # pragma: no cover
+    def close(self):
+        """
+        Close service client and its plugins.
+        """
+        self._execute_plugin_hooks_sync(hook='close')
         self.session.close()
+
+    def __del__(self):  # pragma: no cover
+        self.close()
+
+
+class ConnectionClosedError(Exception):
+    pass

@@ -8,19 +8,20 @@ import logging
 from asyncio import coroutine, TimeoutError
 from asyncio.tasks import sleep, shield
 from datetime import datetime, timedelta
+
 from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
-from multidict import CIMultiDict
 from asynctest.case import TestCase
+from multidict import CIMultiDict
 from yarl import URL
 
-from service_client.utils import ObjectWrapper
+from service_client import ConnectionClosedError
 from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
-    TrackingToken, Pool
+    TrackingToken, Pool, RequestLimitError, RateLimit
+from service_client.utils import ObjectWrapper
 
 
 class PathTests(TestCase):
-
     def setUp(self):
         self.plugin = PathTokens()
         self.session = ClientSession()
@@ -107,11 +108,8 @@ class PathTests(TestCase):
 
 
 class TimeoutTests(TestCase):
-
     def setUp(self):
-
         class SessionMock:
-
             @coroutine
             def request(self, *args, **kwargs):
                 yield from sleep(0.5)
@@ -170,11 +168,8 @@ class TimeoutTests(TestCase):
 
 
 class TimeoutWithResponseTests(TestCase):
-
     def setUp(self):
-
         class SessionMock:
-
             @coroutine
             def request(self, *args, **kwargs):
                 yield from sleep(0.5)
@@ -199,7 +194,6 @@ class TimeoutWithResponseTests(TestCase):
 
 
 class HeadersTests(TestCase):
-
     def setUp(self):
         self.plugin = Headers(default_headers={'x-foo-bar': 'test headers'})
         self.session = ClientSession()
@@ -262,7 +256,6 @@ class HeadersTests(TestCase):
 
 
 class QueryParamsTest(TestCase):
-
     def setUp(self):
         self.plugin = QueryParams()
         self.session = ClientSession()
@@ -276,7 +269,7 @@ class QueryParamsTest(TestCase):
                                'path_param2': 'bar'}
 
     @coroutine
-    def test_use_default(self):
+    def test_use_endpoint_default(self):
         yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
         self.assertDictEqual(self.request_params, {'path_param1': 'foo',
@@ -296,8 +289,106 @@ class QueryParamsTest(TestCase):
                                                        'qparamRequest': 'test'}})
 
 
-class ResponseMock:
+class QueryParamsDefaultTest(TestCase):
+    def setUp(self):
+        self.plugin = QueryParams(default_query_params={'default_param1': 'value1',
+                                                        'default_param2': 'value2'})
+        self.session = ClientSession()
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'GET',
+                              'param1': 'obladi',
+                              'param2': 'oblada',
+                              'query_params': {'qparam1': 1, 'qparam2': 'test2'}}
 
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
+
+    @coroutine
+    def test_use_endpoint_default(self):
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
+                                                   'path_param2': 'bar',
+                                                   'params': {'qparam1': 1,
+                                                              'qparam2': 'test2',
+                                                              'default_param1': 'value1',
+                                                              'default_param2': 'value2'}})
+
+    @coroutine
+    def test_use_endpoint_override(self):
+        self.endpoint_desc['query_params'].update({'default_param1': 2,
+                                                   'default_param2': 'foo'})
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
+                                                   'path_param2': 'bar',
+                                                   'params': {'qparam1': 1,
+                                                              'qparam2': 'test2',
+                                                              'default_param1': 2,
+                                                              'default_param2': 'foo'}})
+
+    @coroutine
+    def test_use_endpoint_remove_default(self):
+        self.endpoint_desc['query_params'].update({'default_param1': None,
+                                                   'default_param2': 'foo'})
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
+                                                   'path_param2': 'bar',
+                                                   'params': {'qparam1': 1,
+                                                              'qparam2': 'test2',
+                                                              'default_param2': 'foo'}})
+
+    @coroutine
+    def test_use_request(self):
+        self.request_params['params'] = {'qparamRequest': 'test'}
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
+                                                   'path_param2': 'bar',
+                                                   'params': {
+                                                       'qparam1': 1,
+                                                       'qparam2': 'test2',
+                                                       'qparamRequest': 'test',
+                                                       'default_param1': 'value1',
+                                                       'default_param2': 'value2'}})
+
+    @coroutine
+    def test_use_request_override(self):
+        self.request_params['params'] = {'qparamRequest': 'test',
+                                         'default_param1': 3,
+                                         'default_param2': 'bar'}
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertDictEqual(self.request_params,
+                             {'path_param1': 'foo',
+                              'path_param2': 'bar',
+                              'params': {
+                                  'qparam1': 1,
+                                  'qparam2': 'test2',
+                                  'qparamRequest': 'test',
+                                  'default_param1': 3,
+                                  'default_param2': 'bar'}},
+                             self.request_params)
+
+    @coroutine
+    def test_use_request_remove(self):
+        self.request_params['params'] = {'qparamRequest': 'test',
+                                         'default_param1': None,
+                                         'default_param2': 'bar'}
+        yield from self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
+
+        self.assertDictEqual(self.request_params,
+                             {'path_param1': 'foo',
+                              'path_param2': 'bar',
+                              'params': {
+                                  'qparam1': 1,
+                                  'qparam2': 'test2',
+                                  'qparamRequest': 'test',
+                                  'default_param2': 'bar'}})
+
+
+class ResponseMock:
     def __init__(self, spend_time):
         self.spend_time = spend_time
 
@@ -312,15 +403,12 @@ class ResponseMock:
 
 
 class ElapsedTest(TestCase):
-
     spend_time = 0.1
 
     def setUp(self):
-
         this = self
 
         class SessionMock:
-
             response = ObjectWrapper(ResponseMock(0.1))
 
             @coroutine
@@ -477,13 +565,10 @@ class ElapsedTest(TestCase):
 
 
 class TrackingTokenTest(TestCase):
-
     def setUp(self):
-
         this = self
 
         class SessionMock:
-
             @coroutine
             def request(self, *args, **kwargs):
                 response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
@@ -534,13 +619,10 @@ class TrackingTokenTest(TestCase):
 
 
 class InnerLogTest(TestCase):
-
     def setUp(self):
-
         this = self
 
         class SessionMock:
-
             @coroutine
             def request(self, *args, **kwargs):
                 response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
@@ -552,7 +634,6 @@ class InnerLogTest(TestCase):
                 return response
 
         class LoggerMock:
-
             def log(self, level, message, *args, **kwargs):
                 self.level = level
                 self.message = message
@@ -560,7 +641,6 @@ class InnerLogTest(TestCase):
                 self.kwargs = kwargs
 
         class ServiceMock:
-
             name = 'test_service'
 
         self.logger = LoggerMock()
@@ -581,7 +661,6 @@ class InnerLogTest(TestCase):
 
     @coroutine
     def test_before_request(self):
-
         yield from self.plugin.before_request(self.endpoint_desc, self.session, self.request_params)
 
         self.assertEqual(self.logger.level, logging.INFO)
@@ -752,12 +831,10 @@ class InnerLogTest(TestCase):
 
 
 class OuterLogTest(TestCase):
-
     def setUp(self):
         this = self
 
         class SessionMock:
-
             @coroutine
             def request(self, *args, **kwargs):
                 response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
@@ -769,7 +846,6 @@ class OuterLogTest(TestCase):
                 return response
 
         class LoggerMock:
-
             def log(self, level, message, *args, **kwargs):
                 self.level = level
                 self.message = message
@@ -921,12 +997,10 @@ class OuterLogTest(TestCase):
 
 
 class PoolTest(TestCase):
-
     def setUp(self):
         this = self
 
         class SessionMock:
-
             @coroutine
             def request(self, *args, **kwargs):
                 response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
@@ -938,11 +1012,10 @@ class PoolTest(TestCase):
                 return response
 
         class ServiceMock:
-
             name = 'test_service'
             loop = self.loop
 
-        self.plugin = Pool()
+        self.plugin = Pool(limit=1, timeout=0.1, hard_limit=1)
 
         self.service = ServiceMock()
         self.plugin.assign_service_client(self.service)
@@ -958,8 +1031,7 @@ class PoolTest(TestCase):
                                'path_param2': 'bar'}
 
     @coroutine
-    def test_pool_limit(self):
-
+    def test_limit(self):
         fut = self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
@@ -977,11 +1049,113 @@ class PoolTest(TestCase):
         yield from asyncio.wait_for(fut, 0.1)
 
     @coroutine
-    def test_pool_limit_using_exception(self):
+    def test_limit_using_exception(self):
+        yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                              self.request_params)
+
+        fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                               self.request_params))
+
+        with self.assertRaises(TimeoutError):
+            yield from asyncio.wait_for(shield(fut), 0.01)
+
+        yield from self.plugin.on_exception(self.endpoint_desc, self.session,
+                                            self.request_params, Exception())
+
+        yield from asyncio.wait_for(fut, 0.1)
+
+    @coroutine
+    def test_timeout(self):
+        yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                              self.request_params)
+
+        with self.assertRaisesRegex(RequestLimitError, "Request blocked too much time"):
+            yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                                  self.request_params)
+
+    @coroutine
+    def test_hard_limit(self):
+        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                         self.request_params))
+        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                         self.request_params))
+        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                         self.request_params))
+
+        with self.assertRaisesRegex(RequestLimitError, "Too many requests pending"):
+            yield from asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                                   self.request_params), timeout=1)
+
+    @coroutine
+    def test_close(self):
+        yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                              self.request_params)
+
+        with self.assertRaises(ConnectionClosedError):
+            fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc,
+                                                                   self.session,
+                                                                   self.request_params))
+            yield from asyncio.sleep(0)
+            self.plugin.close()
+            yield from fut
+
+
+class RateLimitTest(TestCase):
+    def setUp(self):
+        this = self
+
+        class SessionMock:
+            @coroutine
+            def request(self, *args, **kwargs):
+                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
+                response._post_init(this.loop)
+                response._content = b'ssssssss'
+                response.status = 200
+                response.elapsed = timedelta(seconds=100)
+                response.headers = CIMultiDict({"content-type": "application/json"})
+                return response
+
+        class ServiceMock:
+            name = 'test_service'
+            loop = self.loop
+
+        self.plugin = RateLimit(limit=1, period=0.2, timeout=0.1, hard_limit=1)
+
+        self.service = ServiceMock()
+        self.plugin.assign_service_client(self.service)
+
+        self.session = ObjectWrapper(SessionMock())
+        self.endpoint_desc = {'path': '/test1/path/noway',
+                              'method': 'POST',
+                              'param1': 'obladi',
+                              'param2': 'oblada',
+                              'endpoint': 'test_endpoint'}
+
+        self.request_params = {'path_param1': 'foo',
+                               'path_param2': 'bar'}
+
+    @coroutine
+    def test_limit(self):
+        yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                              self.request_params)
+
         fut = self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
+        with self.assertRaises(TimeoutError):
+            yield from asyncio.wait_for(shield(fut), 0.1)
+
+        yield from self.plugin.on_response(self.endpoint_desc, self.session,
+                                           self.request_params, None)
+
+        yield from asyncio.sleep(0.2)
+
         yield from asyncio.wait_for(fut, 0.1)
+
+    @coroutine
+    def test_limit_using_exception(self):
+        yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                              self.request_params)
 
         fut = self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
@@ -992,4 +1166,41 @@ class PoolTest(TestCase):
         yield from self.plugin.on_exception(self.endpoint_desc, self.session,
                                             self.request_params, Exception())
 
+        yield from asyncio.sleep(0.2)
+
         yield from asyncio.wait_for(fut, 0.1)
+
+    @coroutine
+    def test_timeout(self):
+        yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                              self.request_params)
+
+        with self.assertRaisesRegex(RequestLimitError, "Request blocked too much time"):
+            yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                                  self.request_params)
+
+    @coroutine
+    def test_hard_limit(self):
+        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                         self.request_params))
+        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                         self.request_params))
+        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                         self.request_params))
+
+        with self.assertRaisesRegex(RequestLimitError, "Too many requests pending"):
+            yield from asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                                   self.request_params), timeout=1)
+
+    @coroutine
+    def test_close(self):
+        yield from self.plugin.before_request(self.endpoint_desc, self.session,
+                                              self.request_params)
+
+        with self.assertRaises(ConnectionClosedError):
+            fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc,
+                                                                   self.session,
+                                                                   self.request_params))
+            yield from asyncio.sleep(0)
+            self.plugin.close()
+            yield from fut
