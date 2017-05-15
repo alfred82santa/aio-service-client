@@ -5,6 +5,7 @@ Created on 04/04/2014
 '''
 import asyncio
 import logging
+import sys
 from asyncio import coroutine, TimeoutError
 from asyncio.tasks import sleep, shield
 from datetime import datetime, timedelta
@@ -19,6 +20,9 @@ from service_client import ConnectionClosedError
 from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
     TrackingToken, Pool, RequestLimitError, RateLimit
 from service_client.utils import ObjectWrapper
+
+if sys.version_info < (3, 4, 4):
+    asyncio.ensure_future = asyncio.async
 
 
 class PathTests(TestCase):
