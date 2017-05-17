@@ -105,6 +105,7 @@ def build_parameter_object(func=None, *, arg_name='request',
             try:
                 klass = klass.__args__[0]
             except (AttributeError, IndexError):
+                print(dir(klass))
                 pass
 
         @wraps(func)
