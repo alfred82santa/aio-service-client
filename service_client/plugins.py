@@ -12,6 +12,7 @@ from service_client.utils import IncompleteFormatter, random_token
 
 
 class BasePlugin:
+
     def assign_service_client(self, service_client):
         self.service_client = service_client
 
@@ -25,6 +26,7 @@ class BasePlugin:
 
 
 class PathTokens(BasePlugin):
+
     def __init__(self, default_tokens=None):
         self.default_token = default_tokens or {}
 
@@ -46,6 +48,7 @@ class PathTokens(BasePlugin):
 
 
 class Headers(BasePlugin):
+
     def __init__(self, default_headers=None):
         self.default_headers = default_headers.copy() if default_headers else {}
 
@@ -58,6 +61,7 @@ class Headers(BasePlugin):
 
 
 class Timeout(BasePlugin):
+
     def __init__(self, default_timeout=None):
         self.default_timeout = default_timeout
 
@@ -83,6 +87,7 @@ class Timeout(BasePlugin):
 
 
 class Elapsed(BasePlugin):
+
     def __init__(self, headers=True, read=True, parse=True):
         self.headers = headers
         self.read = read
@@ -138,6 +143,7 @@ class Elapsed(BasePlugin):
 
 
 class TrackingToken(BasePlugin):
+
     def __init__(self, prefix='', length=10):
         self.prefix = prefix
         self.length = length
@@ -160,6 +166,7 @@ class TrackingToken(BasePlugin):
 
 
 class QueryParams(BasePlugin):
+
     def __init__(self, default_query_params=None):
         self.default_query_params = default_query_params
 
@@ -174,6 +181,7 @@ class QueryParams(BasePlugin):
 
 
 class BaseLogger(BasePlugin):
+
     def __init__(self, logger, max_body_length=0, level=logging.INFO,
                  on_exception_level=logging.CRITICAL,
                  on_parse_exception_level=logging.CRITICAL):
@@ -365,7 +373,6 @@ class BaseLimitPlugin(BasePlugin):
             setattr(session,
                     self.SESSION_ATTR_TIME_BLOCKED,
                     self.service_client.loop.time() - start)
-
 
     def close(self):
         if self._fut is not None:

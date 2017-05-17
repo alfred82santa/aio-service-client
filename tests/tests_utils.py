@@ -6,6 +6,7 @@ from service_client.utils import IncompleteFormatter, random_token, build_parame
 
 
 class TestIncompleteFormatter(TestCase):
+
     def setUp(self):
         self.formatter = IncompleteFormatter()
 
@@ -74,6 +75,7 @@ class TestIncompleteFormatter(TestCase):
 
 
 class RandomTokenTest(TestCase):
+
     def test_random_token(self):
         self.assertNotEqual(random_token(), random_token())
         self.assertNotEqual(random_token(), random_token())
@@ -87,6 +89,7 @@ class RandomTokenTest(TestCase):
 
 
 class FakeModel:
+
     def __init__(self, data=None):
         try:
             self.fieldname_1 = data['fieldname_1']
@@ -95,7 +98,9 @@ class FakeModel:
 
 
 class BuildParameterObjectTests(TestCase):
+
     class Fake:
+
         @build_parameter_object
         def method_union(self, request: Union[FakeModel, None]):
             return request
@@ -103,10 +108,10 @@ class BuildParameterObjectTests(TestCase):
         @build_parameter_object(arg_name='request_1', arg_index=1, arg_class=FakeModel)
         def method_no_anno_extra_params(self, param_1, request_1, param_2):
             """
-            :param param_1: 
-            :param request_1: 
-            :param param_2: 
-            :return: 
+            :param param_1:
+            :param request_1:
+            :param param_2:
+            :return:
             """
             return param_1, request_1, param_2
 
@@ -201,11 +206,11 @@ class BuildParameterObjectTests(TestCase):
     def test_doc(self):
         self.assertEqual(self.object.method_no_anno_extra_params.__doc__,
                          dedent("""
-                                :param param_1: 
-                                :param request_1: 
-                                :param param_2: 
-                                :return: 
+                                :param param_1:
+                                :param request_1:
+                                :param param_2:
+                                :return:
 
-                                It is possible to use keyword parameters to build an 
+                                It is possible to use keyword parameters to build an
                                 object :class:`~tests.tests_utils.FakeModel` for parameter ``request_1``."""),
                          self.object.method_no_anno_extra_params.__doc__)

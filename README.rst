@@ -137,6 +137,26 @@ v0.6.1
 
 - Tests improved.
 
+- Added decorator in order to help to build service clients. It allows to define a method using a request model
+  but to call it using keywords to build request model which will be used to call method.
+
+.. code-block:: python
+
+    class RequestModel:
+        def __init__(param_1=None):
+            self.param_1 = param_1
+
+
+    class Service:
+
+        @build_parameter_object
+        async def method_1(request: RequestModel):
+            return do_something(request)
+
+
+    serv = Service()
+    await serv.method_1(param_1=23)
+
 v0.6.0
 ------
 

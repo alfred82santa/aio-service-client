@@ -10,6 +10,7 @@ from service_client.utils import ObjectWrapper
 
 
 class FakePlugin:
+
     def __init__(self):
         self.calls = {}
 
@@ -55,6 +56,7 @@ class FakePlugin:
 
 
 class ServiceBasicTest(TestCase):
+
     @patch('service_client.ClientSession')
     def setUp(self, mock_session):
         self.mock_session = mock_session
@@ -113,7 +115,7 @@ class ServiceBasicTest(TestCase):
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                                 'kwargs'], {'service_client': self.service_client})
+            'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -200,7 +202,7 @@ class ServiceBasicTest(TestCase):
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                                 'kwargs'], {'service_client': self.service_client})
+            'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -296,7 +298,7 @@ class ServiceBasicTest(TestCase):
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                                 'kwargs'], {'service_client': self.service_client})
+            'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -401,7 +403,7 @@ class ServiceBasicTest(TestCase):
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                                 'kwargs'], {'service_client': self.service_client})
+            'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())
@@ -491,7 +493,7 @@ class ServiceBasicTest(TestCase):
         self.assertIn('assign_service_client', self.plugin.calls, "Assign service_client call")
         self.assertEqual(self.plugin.calls['assign_service_client']['args'], ())
         self.assertDictEqual(self.plugin.calls['assign_service_client'][
-                                 'kwargs'], {'service_client': self.service_client})
+            'kwargs'], {'service_client': self.service_client})
 
         self.assertIn('prepare_session', self.plugin.calls, "Prepare session call")
         self.assertEqual(self.plugin.calls['prepare_session']['args'], ())

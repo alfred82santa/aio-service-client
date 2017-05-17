@@ -14,6 +14,7 @@ class NoMock(Exception):
 
 
 class BaseMockDefinition:
+
     def __init__(self, mock_manager, service_name=None, endpoint=None, offset=0, limit=1):
         self.mock_manager = mock_manager
         self.service_name = service_name
@@ -37,18 +38,21 @@ class BaseMockDefinition:
 
 
 class PatchMockDescDefinition(BaseMockDefinition):
+
     def __init__(self, patch, *args, **kwargs):
         super(PatchMockDescDefinition, self).__init__(*args, **kwargs)
         self.patch = patch
 
 
 class UseMockDefinition(BaseMockDefinition):
+
     def __init__(self, mock, *args, **kwargs):
         super(UseMockDefinition, self).__init__(*args, **kwargs)
         self.mock = mock
 
 
 class MockManager:
+
     def __init__(self):
         self.mocks = []
 
@@ -129,6 +133,7 @@ mock_manager = MockManager()
 
 
 class Mock(BasePlugin):
+
     def __init__(self, namespaces=None):
 
         self.loader = LoaderNamespaceReversedCached()
@@ -173,6 +178,7 @@ class Mock(BasePlugin):
 
 
 class BaseMock:
+
     def __init__(self, endpoint_desc, session, request_params,
                  mock_desc, loop=None):
         self.endpoint_desc = endpoint_desc
@@ -214,5 +220,6 @@ class BaseFileMock(BaseMock):
 
 
 class RawFileMock(BaseFileMock):
+
     def load_file(self, filename):
         return open(filename, "rb").read()

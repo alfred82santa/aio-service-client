@@ -22,6 +22,7 @@ from service_client.utils import ObjectWrapper
 
 
 class PathTests(TestCase):
+
     def setUp(self):
         self.plugin = PathTokens()
         self.session = ClientSession()
@@ -101,6 +102,7 @@ class PathTests(TestCase):
 
 
 class TimeoutTests(TestCase):
+
     def setUp(self):
         class SessionMock:
             async def request(self, *args, **kwargs):
@@ -156,6 +158,7 @@ class TimeoutTests(TestCase):
 
 
 class TimeoutWithResponseTests(TestCase):
+
     def setUp(self):
         class SessionMock:
             async def request(self, *args, **kwargs):
@@ -180,6 +183,7 @@ class TimeoutWithResponseTests(TestCase):
 
 
 class HeadersTests(TestCase):
+
     def setUp(self):
         self.plugin = Headers(default_headers={'x-foo-bar': 'test headers'})
         self.session = ClientSession()
@@ -237,6 +241,7 @@ class HeadersTests(TestCase):
 
 
 class QueryParamsTest(TestCase):
+
     def setUp(self):
         self.plugin = QueryParams()
         self.session = ClientSession()
@@ -269,6 +274,7 @@ class QueryParamsTest(TestCase):
 
 
 class QueryParamsDefaultTest(TestCase):
+
     def setUp(self):
         self.plugin = QueryParams(default_query_params={'default_param1': 'value1',
                                                         'default_param2': 'value2'})
@@ -362,6 +368,7 @@ class QueryParamsDefaultTest(TestCase):
 
 
 class ResponseMock:
+
     def __init__(self, spend_time):
         self.spend_time = spend_time
 
@@ -523,6 +530,7 @@ class ElapsedTest(TestCase):
 
 
 class TrackingTokenTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -572,6 +580,7 @@ class TrackingTokenTest(TestCase):
 
 
 class InnerLogTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -586,6 +595,7 @@ class InnerLogTest(TestCase):
                 return response
 
         class LoggerMock:
+
             def log(self, level, message, *args, **kwargs):
                 self.level = level
                 self.message = message
@@ -774,6 +784,7 @@ class InnerLogTest(TestCase):
 
 
 class OuterLogTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -788,6 +799,7 @@ class OuterLogTest(TestCase):
                 return response
 
         class LoggerMock:
+
             def log(self, level, message, *args, **kwargs):
                 self.level = level
                 self.message = message
@@ -932,6 +944,7 @@ class OuterLogTest(TestCase):
 
 
 class PoolTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -1053,6 +1066,7 @@ class PoolTest(TestCase):
 
 
 class RateLimitTest(TestCase):
+
     def setUp(self):
         this = self
 

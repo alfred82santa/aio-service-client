@@ -108,7 +108,7 @@ class ServiceClient:
             await self.on_parsed_response(endpoint_desc, session, request_params, response)
         except Exception as ex:
             self.logger.warning("[Response code: {0}] Exception parsing response from service "
-                             "{1}: {2}".format(response.status, endpoint, ex))
+                                "{1}: {2}".format(response.status, endpoint, ex))
             await self.on_parse_exception(endpoint_desc, session, request_params, response, ex)
             ex.response = response
             raise ex

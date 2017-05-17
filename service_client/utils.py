@@ -53,6 +53,7 @@ def random_token(length=10):
 
 
 class ObjectWrapper:
+
     def __init__(self, obj):
         self.__dict__['_obj'] = None
         self.__dict__['_data'] = {}
@@ -130,7 +131,7 @@ def build_parameter_object(func=None, *, arg_name='request',
             return func(self, *args, **new_kwargs)
 
         wrapper.__doc__ = dedent(func.__doc__ or '') + dedent("""
-            It is possible to use keyword parameters to build an 
+            It is possible to use keyword parameters to build an
             object :class:`~{0}` for parameter ``{1}``.""").format('.'.join([klass.__module__,
                                                                              klass.__name__]),
                                                                    arg_name)
