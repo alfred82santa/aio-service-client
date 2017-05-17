@@ -17,7 +17,7 @@ from yarl import URL
 
 from service_client import ConnectionClosedError
 from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
-    TrackingToken, Pool, RequestLimitError, RateLimit
+    TrackingToken, Pool, RateLimit, TooMuchTimePendingError, TooManyRequestsPendingError
 from service_client.utils import ObjectWrapper
 
 
@@ -1022,7 +1022,7 @@ class PoolTest(TestCase):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        with self.assertRaisesRegex(RequestLimitError, "Request blocked too much time"):
+        with self.assertRaisesRegex(TooMuchTimePendingError, "Request blocked too much time on pool"):
             await self.plugin.before_request(self.endpoint_desc, self.session,
                                              self.request_params)
 
@@ -1037,7 +1037,7 @@ class PoolTest(TestCase):
         asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
                                                          self.request_params))
 
-        with self.assertRaisesRegex(RequestLimitError, "Too many requests pending"):
+        with self.assertRaisesRegex(TooManyRequestsPendingError, "Too many requests pending on pool"):
             await asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
                                                               self.request_params), timeout=1)
 
@@ -1160,7 +1160,7 @@ class RateLimitTest(TestCase):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        with self.assertRaisesRegex(RequestLimitError, "Request blocked too much time"):
+        with self.assertRaisesRegex(TooMuchTimePendingError, "Request blocked too much time by rate limit"):
             await self.plugin.before_request(self.endpoint_desc, self.session,
                                              self.request_params)
 
@@ -1175,7 +1175,7 @@ class RateLimitTest(TestCase):
         asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
                                                          self.request_params))
 
-        with self.assertRaisesRegex(RequestLimitError, "Too many requests pending"):
+        with self.assertRaisesRegex(TooManyRequestsPendingError, "Too many requests pending by rate limit"):
             await asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
                                                               self.request_params), timeout=1)
 

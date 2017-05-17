@@ -318,8 +318,19 @@ class RequestLimitError(Exception):
     pass
 
 
+class TooManyRequestsPendingError(RequestLimitError):
+    pass
+
+
+class TooMuchTimePendingError(RequestLimitError):
+    pass
+
+
 class BaseLimitPlugin(BasePlugin):
     SESSION_ATTR_TIME_BLOCKED = 'blocked'
+
+    TOO_MANY_REQ_PENDING_MSG = "Too many requests pending"
+    TOO_MUCH_TIME_MSG = "Request blocked too much time"
 
     def __init__(self, limit=1, timeout=None, hard_limit=None):
         self.limit = limit
@@ -342,7 +353,7 @@ class BaseLimitPlugin(BasePlugin):
                 break
 
             if self._hard_limit is not None and self._hard_limit < self.pending:
-                raise RequestLimitError("Too many requests pending")
+                raise TooManyRequestsPendingError(self.TOO_MANY_REQ_PENDING_MSG)
 
             if self._fut is None:
                 self._fut = self.service_client.loop.create_future()
@@ -356,7 +367,7 @@ class BaseLimitPlugin(BasePlugin):
                     if timeout <= 0:
                         raise TimeoutError()
             except TimeoutError:
-                raise RequestLimitError("Request blocked too much time")
+                raise TooMuchTimePendingError(self.TOO_MUCH_TIME_MSG)
             finally:
                 self._pending -= 1
 
@@ -383,6 +394,9 @@ class BaseLimitPlugin(BasePlugin):
 class Pool(BaseLimitPlugin):
     SESSION_ATTR_TIME_BLOCKED = 'blocked_by_pool'
 
+    TOO_MANY_REQ_PENDING_MSG = "Too many requests pending on pool"
+    TOO_MUCH_TIME_MSG = "Request blocked too much time on pool"
+
     async def on_response(self, endpoint_desc, session, request_params, response):
         self._release()
 
@@ -393,6 +407,9 @@ class Pool(BaseLimitPlugin):
 
 class RateLimit(BaseLimitPlugin):
     SESSION_ATTR_TIME_BLOCKED = 'blocked_by_ratelimit'
+
+    TOO_MANY_REQ_PENDING_MSG = "Too many requests pending by rate limit"
+    TOO_MUCH_TIME_MSG = "Request blocked too much time by rate limit"
 
     def __init__(self, period=1, *args, **kwargs):
         super(RateLimit, self).__init__(*args, **kwargs)

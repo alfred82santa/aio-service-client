@@ -53,6 +53,7 @@ def random_token(length=10):
 
 
 class ObjectWrapper:
+
     def __init__(self, obj):
         self.__dict__['_obj'] = None
         self.__dict__['_data'] = {}
