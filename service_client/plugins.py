@@ -12,6 +12,7 @@ from service_client.utils import IncompleteFormatter, random_token
 
 
 class BasePlugin:
+
     def assign_service_client(self, service_client):
         self.service_client = service_client
 
@@ -25,6 +26,7 @@ class BasePlugin:
 
 
 class PathTokens(BasePlugin):
+
     def __init__(self, default_tokens=None):
         self.default_token = default_tokens or {}
 
@@ -46,6 +48,7 @@ class PathTokens(BasePlugin):
 
 
 class Headers(BasePlugin):
+
     def __init__(self, default_headers=None):
         self.default_headers = default_headers.copy() if default_headers else {}
 
@@ -58,6 +61,7 @@ class Headers(BasePlugin):
 
 
 class Timeout(BasePlugin):
+
     def __init__(self, default_timeout=None):
         self.default_timeout = default_timeout
 
@@ -83,6 +87,7 @@ class Timeout(BasePlugin):
 
 
 class Elapsed(BasePlugin):
+
     def __init__(self, headers=True, read=True, parse=True):
         self.headers = headers
         self.read = read
@@ -138,6 +143,7 @@ class Elapsed(BasePlugin):
 
 
 class TrackingToken(BasePlugin):
+
     def __init__(self, prefix='', length=10):
         self.prefix = prefix
         self.length = length
@@ -160,6 +166,7 @@ class TrackingToken(BasePlugin):
 
 
 class QueryParams(BasePlugin):
+
     def __init__(self, default_query_params=None):
         self.default_query_params = default_query_params
 
@@ -174,6 +181,7 @@ class QueryParams(BasePlugin):
 
 
 class BaseLogger(BasePlugin):
+
     def __init__(self, logger, max_body_length=0, level=logging.INFO,
                  on_exception_level=logging.CRITICAL,
                  on_parse_exception_level=logging.CRITICAL):
@@ -310,7 +318,20 @@ class RequestLimitError(Exception):
     pass
 
 
+class TooManyRequestsPendingError(RequestLimitError):
+    pass
+
+
+class TooMuchTimePendingError(RequestLimitError):
+    pass
+
+
 class BaseLimitPlugin(BasePlugin):
+    SESSION_ATTR_TIME_BLOCKED = 'blocked'
+
+    TOO_MANY_REQ_PENDING_MSG = "Too many requests pending"
+    TOO_MUCH_TIME_MSG = "Request blocked too much time"
+
     def __init__(self, limit=1, timeout=None, hard_limit=None):
         self.limit = limit
         self._counter = 0
@@ -324,6 +345,7 @@ class BaseLimitPlugin(BasePlugin):
         return self._pending
 
     async def _acquire(self):
+
         timeout = self._timeout
         while True:
             if self._counter < self.limit:
@@ -331,7 +353,7 @@ class BaseLimitPlugin(BasePlugin):
                 break
 
             if self._hard_limit is not None and self._hard_limit < self.pending:
-                raise RequestLimitError("Too many requests pending")
+                raise TooManyRequestsPendingError(self.TOO_MANY_REQ_PENDING_MSG)
 
             if self._fut is None:
                 self._fut = self.service_client.loop.create_future()
@@ -345,7 +367,7 @@ class BaseLimitPlugin(BasePlugin):
                     if timeout <= 0:
                         raise TimeoutError()
             except TimeoutError:
-                raise RequestLimitError("Request blocked too much time")
+                raise TooMuchTimePendingError(self.TOO_MUCH_TIME_MSG)
             finally:
                 self._pending -= 1
 
@@ -355,7 +377,13 @@ class BaseLimitPlugin(BasePlugin):
             self._fut.set_result(None)
 
     async def before_request(self, endpoint_desc, session, request_params):
-        await self._acquire()
+        start = self.service_client.loop.time()
+        try:
+            await self._acquire()
+        finally:
+            setattr(session,
+                    self.SESSION_ATTR_TIME_BLOCKED,
+                    self.service_client.loop.time() - start)
 
     def close(self):
         if self._fut is not None:
@@ -364,6 +392,11 @@ class BaseLimitPlugin(BasePlugin):
 
 
 class Pool(BaseLimitPlugin):
+    SESSION_ATTR_TIME_BLOCKED = 'blocked_by_pool'
+
+    TOO_MANY_REQ_PENDING_MSG = "Too many requests pending on pool"
+    TOO_MUCH_TIME_MSG = "Request blocked too much time on pool"
+
     async def on_response(self, endpoint_desc, session, request_params, response):
         self._release()
 
@@ -373,6 +406,11 @@ class Pool(BaseLimitPlugin):
 
 
 class RateLimit(BaseLimitPlugin):
+    SESSION_ATTR_TIME_BLOCKED = 'blocked_by_ratelimit'
+
+    TOO_MANY_REQ_PENDING_MSG = "Too many requests pending by rate limit"
+    TOO_MUCH_TIME_MSG = "Request blocked too much time by rate limit"
+
     def __init__(self, period=1, *args, **kwargs):
         super(RateLimit, self).__init__(*args, **kwargs)
         self.period = period

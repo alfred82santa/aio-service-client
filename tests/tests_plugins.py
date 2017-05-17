@@ -17,11 +17,12 @@ from yarl import URL
 
 from service_client import ConnectionClosedError
 from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
-    TrackingToken, Pool, RequestLimitError, RateLimit
+    TrackingToken, Pool, RateLimit, TooMuchTimePendingError, TooManyRequestsPendingError
 from service_client.utils import ObjectWrapper
 
 
 class PathTests(TestCase):
+
     def setUp(self):
         self.plugin = PathTokens()
         self.session = ClientSession()
@@ -101,6 +102,7 @@ class PathTests(TestCase):
 
 
 class TimeoutTests(TestCase):
+
     def setUp(self):
         class SessionMock:
             async def request(self, *args, **kwargs):
@@ -156,6 +158,7 @@ class TimeoutTests(TestCase):
 
 
 class TimeoutWithResponseTests(TestCase):
+
     def setUp(self):
         class SessionMock:
             async def request(self, *args, **kwargs):
@@ -180,6 +183,7 @@ class TimeoutWithResponseTests(TestCase):
 
 
 class HeadersTests(TestCase):
+
     def setUp(self):
         self.plugin = Headers(default_headers={'x-foo-bar': 'test headers'})
         self.session = ClientSession()
@@ -237,6 +241,7 @@ class HeadersTests(TestCase):
 
 
 class QueryParamsTest(TestCase):
+
     def setUp(self):
         self.plugin = QueryParams()
         self.session = ClientSession()
@@ -269,6 +274,7 @@ class QueryParamsTest(TestCase):
 
 
 class QueryParamsDefaultTest(TestCase):
+
     def setUp(self):
         self.plugin = QueryParams(default_query_params={'default_param1': 'value1',
                                                         'default_param2': 'value2'})
@@ -362,6 +368,7 @@ class QueryParamsDefaultTest(TestCase):
 
 
 class ResponseMock:
+
     def __init__(self, spend_time):
         self.spend_time = spend_time
 
@@ -523,6 +530,7 @@ class ElapsedTest(TestCase):
 
 
 class TrackingTokenTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -572,6 +580,7 @@ class TrackingTokenTest(TestCase):
 
 
 class InnerLogTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -586,6 +595,7 @@ class InnerLogTest(TestCase):
                 return response
 
         class LoggerMock:
+
             def log(self, level, message, *args, **kwargs):
                 self.level = level
                 self.message = message
@@ -774,6 +784,7 @@ class InnerLogTest(TestCase):
 
 
 class OuterLogTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -788,6 +799,7 @@ class OuterLogTest(TestCase):
                 return response
 
         class LoggerMock:
+
             def log(self, level, message, *args, **kwargs):
                 self.level = level
                 self.message = message
@@ -932,6 +944,7 @@ class OuterLogTest(TestCase):
 
 
 class PoolTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -963,6 +976,17 @@ class PoolTest(TestCase):
 
         self.request_params = {'path_param1': 'foo',
                                'path_param2': 'bar'}
+
+    def tearDown(self):
+        pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
+        while len(pending):
+            try:
+                self.loop.run_until_complete(asyncio.gather(*pending,
+                                                            loop=self.loop))
+            except Exception:
+                pass
+            finally:
+                pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
 
     async def test_limit(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
@@ -998,9 +1022,12 @@ class PoolTest(TestCase):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        with self.assertRaisesRegex(RequestLimitError, "Request blocked too much time"):
+        with self.assertRaisesRegex(TooMuchTimePendingError, "Request blocked too much time on pool"):
             await self.plugin.before_request(self.endpoint_desc, self.session,
                                              self.request_params)
+
+        self.assertGreaterEqual(self.session.blocked_by_pool, 0.1)
+        self.assertLessEqual(self.session.blocked_by_pool, 0.5)
 
     async def test_hard_limit(self):
         asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
@@ -1010,9 +1037,12 @@ class PoolTest(TestCase):
         asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
                                                          self.request_params))
 
-        with self.assertRaisesRegex(RequestLimitError, "Too many requests pending"):
+        with self.assertRaisesRegex(TooManyRequestsPendingError, "Too many requests pending on pool"):
             await asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
                                                               self.request_params), timeout=1)
+
+        self.assertGreaterEqual(self.session.blocked_by_pool, 0)
+        self.assertLessEqual(self.session.blocked_by_pool, 0.1)
 
     async def test_close(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
@@ -1026,8 +1056,17 @@ class PoolTest(TestCase):
             self.plugin.close()
             await fut
 
+    async def test_regular_work(self):
+        for _ in range(10):
+            await self.plugin.before_request(self.endpoint_desc, self.session,
+                                             self.request_params)
+
+            await self.plugin.on_response(self.endpoint_desc, self.session,
+                                          self.request_params, None)
+
 
 class RateLimitTest(TestCase):
+
     def setUp(self):
         this = self
 
@@ -1059,6 +1098,17 @@ class RateLimitTest(TestCase):
 
         self.request_params = {'path_param1': 'foo',
                                'path_param2': 'bar'}
+
+    def tearDown(self):
+        pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
+        while len(pending):
+            try:
+                self.loop.run_until_complete(asyncio.gather(*pending,
+                                                            loop=self.loop))
+            except Exception:
+                pass
+            finally:
+                pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
 
     async def test_limit(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
@@ -1110,21 +1160,27 @@ class RateLimitTest(TestCase):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        with self.assertRaisesRegex(RequestLimitError, "Request blocked too much time"):
+        with self.assertRaisesRegex(TooMuchTimePendingError, "Request blocked too much time by rate limit"):
             await self.plugin.before_request(self.endpoint_desc, self.session,
                                              self.request_params)
 
+        self.assertGreaterEqual(self.session.blocked_by_ratelimit, 0.5)
+        self.assertLessEqual(self.session.blocked_by_ratelimit, 1)
+
     async def test_hard_limit(self):
-        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                         self.request_params))
+        await self.plugin.before_request(self.endpoint_desc, self.session,
+                                         self.request_params)
         asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
                                                          self.request_params))
         asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
                                                          self.request_params))
 
-        with self.assertRaisesRegex(RequestLimitError, "Too many requests pending"):
+        with self.assertRaisesRegex(TooManyRequestsPendingError, "Too many requests pending by rate limit"):
             await asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
                                                               self.request_params), timeout=1)
+
+        self.assertGreaterEqual(self.session.blocked_by_ratelimit, 0)
+        self.assertLessEqual(self.session.blocked_by_ratelimit, 0.5)
 
     async def test_close(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
@@ -1137,3 +1193,13 @@ class RateLimitTest(TestCase):
             await asyncio.sleep(0)
             self.plugin.close()
             await fut
+
+    async def test_regular_work(self):
+        for _ in range(10):
+            await self.plugin.before_request(self.endpoint_desc, self.session,
+                                             self.request_params)
+
+            await self.plugin.on_response(self.endpoint_desc, self.session,
+                                          self.request_params, None)
+
+            await asyncio.sleep(0.2)

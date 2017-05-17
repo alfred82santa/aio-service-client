@@ -10,6 +10,7 @@ MOCKS_DIR = os.path.join(os.path.dirname(__file__), 'mock_files')
 
 
 class RaiseExceptionMock:
+
     def __init__(self, exception):
         self.ex = exception
 
@@ -21,6 +22,7 @@ class RaiseExceptionMock:
 
 
 class TestMocker(TestCase):
+
     def setUp(self):
         self.plugin = Mock(namespaces={'mocks': 'tests.mocks'})
         self.session = ObjectWrapper(ClientSession())

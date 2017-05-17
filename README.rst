@@ -126,6 +126,40 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.6.1
+------
+
+- Pool plugin now add ``blocked_by_pool`` attribute to session containing elapsed time (seconds) on pool. It allows
+  to log this time using log plugins.
+
+- RateLimit plugin now add ``blocked_by_ratelimit`` attribute to session containing elapsed time (seconds) blocked by
+  rate limit. It allows to log this time using log plugins.
+
+- Tests improved.
+
+- Added new exceptions: :class:`~service_client.plugins.TooManyRequestsPendingError` and
+  :class:`~service_client.plugins.TooMuchTimePendingError`.
+
+- Added decorator in order to help to build service clients. It allows to define a method using a request model
+  but to call it using keywords to build request model which will be used to call method.
+
+.. code-block:: python
+
+    class RequestModel:
+        def __init__(param_1=None):
+            self.param_1 = param_1
+
+
+    class Service:
+
+        @build_parameter_object
+        async def method_1(request: RequestModel):
+            return do_something(request)
+
+
+    serv = Service()
+    await serv.method_1(param_1=23)
+
 v0.6.0
 ------
 
