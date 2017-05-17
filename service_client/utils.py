@@ -118,7 +118,8 @@ def build_parameter_object(func=None, *, arg_name='request',
                 try:
                     obj = kwargs[arg_name]
                 except KeyError:
-                    print(dir(klass))
+                    print(dir(klass.__union_params__))
+                    print(dir(klass.__union_set_params__))
                     obj = klass(**{init_arg_name: kwargs})
 
             new_kwargs = {}
