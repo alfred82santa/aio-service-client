@@ -53,7 +53,6 @@ def random_token(length=10):
 
 
 class ObjectWrapper:
-
     def __init__(self, obj):
         self.__dict__['_obj'] = None
         self.__dict__['_data'] = {}
@@ -104,8 +103,11 @@ def build_parameter_object(func=None, *, arg_name='request',
 
             try:
                 klass = klass.__args__[0]
-            except (AttributeError, IndexError):
-                pass
+            except (AttributeError, IndexError):  # pragma: no cover
+                try:
+                    klass = klass.__union_params__[0]
+                except (AttributeError, IndexError):
+                    pass
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -118,8 +120,6 @@ def build_parameter_object(func=None, *, arg_name='request',
                 try:
                     obj = kwargs[arg_name]
                 except KeyError:
-                    print(klass.__union_params__)
-                    print(klass.__union_set_params__)
                     obj = klass(**{init_arg_name: kwargs})
 
             new_kwargs = {}
