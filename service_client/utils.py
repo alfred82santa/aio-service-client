@@ -105,7 +105,6 @@ def build_parameter_object(func=None, *, arg_name='request',
             try:
                 klass = klass.__args__[0]
             except (AttributeError, IndexError):
-                print(dir(klass))
                 pass
 
         @wraps(func)
@@ -119,6 +118,7 @@ def build_parameter_object(func=None, *, arg_name='request',
                 try:
                     obj = kwargs[arg_name]
                 except KeyError:
+                    print(dir(klass))
                     obj = klass(**{init_arg_name: kwargs})
 
             new_kwargs = {}
