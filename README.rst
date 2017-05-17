@@ -126,6 +126,17 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+v0.6.1
+------
+
+- Pool plugin now add ``blocked_by_pool`` attribute to session containing elapsed time (seconds) on pool. It allows
+  to log this time using log plugins.
+
+- Pool plugin now add ``blocked_by_ratelimit`` attribute to session containing elapsed time (seconds) blocked by
+  rate limit. It allows to log this time using log plugins.
+
+- Tests improved.
+
 v0.6.0
 ------
 

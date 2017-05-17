@@ -1,11 +1,13 @@
 import string
+from inspect import signature
 from string import Formatter
+from textwrap import dedent
 
 import random
+from functools import wraps
 
 
 class IncompleteFormatter(Formatter):
-
     """
     String formatter to safe replace every placeholder. When the placeholder is not
     replaced it remains the same in the string.
@@ -51,7 +53,6 @@ def random_token(length=10):
 
 
 class ObjectWrapper:
-
     def __init__(self, obj):
         self.__dict__['_obj'] = None
         self.__dict__['_data'] = {}
@@ -90,3 +91,52 @@ class ObjectWrapper:
 
     def get_wrapper_data(self):
         return {k: v for k, v in self._data.items() if not callable(v)}
+
+
+def build_parameter_object(func=None, *, arg_name='request',
+                           arg_index=0, arg_class=None, init_arg_name='data'):
+    def inner(func):
+        klass = arg_class
+        type_hints = signature(func).parameters
+        if klass is None:
+            klass = type_hints[arg_name].annotation
+
+            try:
+                klass = klass.__args__[0]
+            except (AttributeError, IndexError):
+                pass
+
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            use_index = False
+            try:
+                args = list(args)
+                obj = args.pop(arg_index)
+                use_index = True
+            except IndexError:
+                try:
+                    obj = kwargs[arg_name]
+                except KeyError:
+                    obj = klass(**{init_arg_name: kwargs})
+
+            new_kwargs = {}
+            if use_index:
+                args.insert(arg_index, obj)
+            else:
+                new_kwargs[arg_name] = obj
+
+            new_kwargs.update({k: v for k, v in kwargs.items()
+                               if k in type_hints and k != arg_name})
+            return func(self, *args, **new_kwargs)
+
+        wrapper.__doc__ = dedent(func.__doc__ or '') + dedent("""
+            It is possible to use keyword parameters to build an 
+            object :class:`~{0}` for parameter ``{1}``.""").format('.'.join([klass.__module__,
+                                                                             klass.__name__]),
+                                                                   arg_name)
+
+        return wrapper
+
+    if func:
+        return inner(func)
+    return inner

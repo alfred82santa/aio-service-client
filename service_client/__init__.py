@@ -10,7 +10,7 @@ from yarl import URL
 
 from .utils import ObjectWrapper
 
-__version__ = '0.6.0'
+__version__ = '0.6.1'
 
 
 class ServiceClient:
@@ -84,10 +84,10 @@ class ServiceClient:
             task.request_params = request_params
 
             response = await session.request(**request_params)
-        except Exception as e:
-            self.logger.warn("Exception calling service {0}: {1}".format(endpoint, e))
-            await self.on_exception(endpoint_desc, session, request_params, e)
-            raise e
+        except Exception as ex:
+            self.logger.warning("Exception calling service {0}: {1}".format(endpoint, ex))
+            await self.on_exception(endpoint_desc, session, request_params, ex)
+            raise ex
 
         await self.on_response(endpoint_desc, session, request_params, response)
 
@@ -106,12 +106,12 @@ class ServiceClient:
                                         endpoint_desc=endpoint_desc,
                                         response=response)
             await self.on_parsed_response(endpoint_desc, session, request_params, response)
-        except Exception as e:
-            self.logger.warn("[Response code: {0}] Exception parsing response from service "
-                             "{1}: {2}".format(response.status, endpoint, e))
-            await self.on_parse_exception(endpoint_desc, session, request_params, response, e)
-            e.response = response
-            raise e
+        except Exception as ex:
+            self.logger.warning("[Response code: {0}] Exception parsing response from service "
+                             "{1}: {2}".format(response.status, endpoint, ex))
+            await self.on_parse_exception(endpoint_desc, session, request_params, response, ex)
+            ex.response = response
+            raise ex
 
         return response
 

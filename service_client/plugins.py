@@ -311,6 +311,8 @@ class RequestLimitError(Exception):
 
 
 class BaseLimitPlugin(BasePlugin):
+    SESSION_ATTR_TIME_BLOCKED = 'blocked'
+
     def __init__(self, limit=1, timeout=None, hard_limit=None):
         self.limit = limit
         self._counter = 0
@@ -324,6 +326,7 @@ class BaseLimitPlugin(BasePlugin):
         return self._pending
 
     async def _acquire(self):
+
         timeout = self._timeout
         while True:
             if self._counter < self.limit:
@@ -355,7 +358,14 @@ class BaseLimitPlugin(BasePlugin):
             self._fut.set_result(None)
 
     async def before_request(self, endpoint_desc, session, request_params):
-        await self._acquire()
+        start = self.service_client.loop.time()
+        try:
+            await self._acquire()
+        finally:
+            setattr(session,
+                    self.SESSION_ATTR_TIME_BLOCKED,
+                    self.service_client.loop.time() - start)
+
 
     def close(self):
         if self._fut is not None:
@@ -364,6 +374,8 @@ class BaseLimitPlugin(BasePlugin):
 
 
 class Pool(BaseLimitPlugin):
+    SESSION_ATTR_TIME_BLOCKED = 'blocked_by_pool'
+
     async def on_response(self, endpoint_desc, session, request_params, response):
         self._release()
 
@@ -373,6 +385,8 @@ class Pool(BaseLimitPlugin):
 
 
 class RateLimit(BaseLimitPlugin):
+    SESSION_ATTR_TIME_BLOCKED = 'blocked_by_ratelimit'
+
     def __init__(self, period=1, *args, **kwargs):
         super(RateLimit, self).__init__(*args, **kwargs)
         self.period = period
