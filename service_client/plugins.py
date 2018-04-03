@@ -4,7 +4,7 @@ from datetime import datetime
 from urllib.parse import quote_plus
 
 import weakref
-from aiohttp.helpers import Timeout as TimeoutContext
+from async_timeout import timeout as TimeoutContext
 from functools import wraps
 from multidict import CIMultiDict
 

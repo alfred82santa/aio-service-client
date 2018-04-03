@@ -23,7 +23,7 @@ class RaiseExceptionMock:
 
 class TestMocker(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         self.plugin = Mock(namespaces={'mocks': 'tests.mocks'})
         self.session = ObjectWrapper(ClientSession())
         self.service_desc = {'mock': {'mock_type': 'mocks:FakeMock',
