@@ -6,24 +6,24 @@ Created on 04/04/2014
 import asyncio
 import logging
 from asyncio import TimeoutError
-from asyncio.tasks import sleep, shield
+from asyncio.tasks import shield, sleep
 from datetime import datetime, timedelta
 
 from aiohttp.client import ClientSession
-from aiohttp.client_reqrep import ClientResponse
 from asynctest.case import TestCase
 from multidict import CIMultiDict
 from yarl import URL
 
 from service_client import ConnectionClosedError
-from service_client.plugins import PathTokens, Timeout, Headers, QueryParams, Elapsed, InnerLogger, OuterLogger, \
-    TrackingToken, Pool, RateLimit, TooMuchTimePendingError, TooManyRequestsPendingError
+from service_client.plugins import Elapsed, Headers, InnerLogger, OuterLogger, PathTokens, Pool, \
+    QueryParams, RateLimit, Timeout, TooManyRequestsPendingError, TooMuchTimePendingError, TrackingToken
 from service_client.utils import ObjectWrapper
+from tests import create_fake_response
 
 
 class PathTests(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         self.plugin = PathTokens()
         self.session = ClientSession()
         self.endpoint_desc = {'path': '/test1/path/noway',
@@ -103,7 +103,7 @@ class PathTests(TestCase):
 
 class TimeoutTests(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         class SessionMock:
             async def request(self, *args, **kwargs):
                 await sleep(0.5)
@@ -159,7 +159,7 @@ class TimeoutTests(TestCase):
 
 class TimeoutWithResponseTests(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         class SessionMock:
             async def request(self, *args, **kwargs):
                 await sleep(0.5)
@@ -184,7 +184,7 @@ class TimeoutWithResponseTests(TestCase):
 
 class HeadersTests(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         self.plugin = Headers(default_headers={'x-foo-bar': 'test headers'})
         self.session = ClientSession()
         self.endpoint_desc = {'path': '/test1/path/noway',
@@ -242,7 +242,7 @@ class HeadersTests(TestCase):
 
 class QueryParamsTest(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         self.plugin = QueryParams()
         self.session = ClientSession()
         self.endpoint_desc = {'path': '/test1/path/noway',
@@ -275,7 +275,7 @@ class QueryParamsTest(TestCase):
 
 class QueryParamsDefaultTest(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         self.plugin = QueryParams(default_query_params={'default_param1': 'value1',
                                                         'default_param2': 'value2'})
         self.session = ClientSession()
@@ -383,7 +383,7 @@ class ResponseMock:
 class ElapsedTest(TestCase):
     spend_time = 0.1
 
-    def setUp(self):
+    async def setUp(self):
         this = self
 
         class SessionMock:
@@ -531,14 +531,13 @@ class ElapsedTest(TestCase):
 
 class TrackingTokenTest(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         this = self
 
         class SessionMock:
             async def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
-                response._post_init(this.loop)
-                return response
+                return ObjectWrapper(await create_fake_response('get', URL('http://test.test'),
+                                                                session=self, loop=this.loop))
 
         self.plugin = TrackingToken(prefix='test-')
         self.session = ObjectWrapper(SessionMock())
@@ -581,14 +580,15 @@ class TrackingTokenTest(TestCase):
 
 class InnerLogTest(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         this = self
 
         class SessionMock:
             async def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
-                response._post_init(this.loop)
-                response._content = b'ssssssss'
+                response = ObjectWrapper(await create_fake_response('get', URL('http://test.test'),
+                                                                    session=self, loop=this.loop))
+
+                response._body = b'ssssssss'
                 response.status = 200
                 response.elapsed = timedelta(seconds=100)
                 response.headers = CIMultiDict({"content-type": "application/json"})
@@ -785,14 +785,15 @@ class InnerLogTest(TestCase):
 
 class OuterLogTest(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         this = self
 
         class SessionMock:
             async def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
-                response._post_init(this.loop)
-                response._content = b'ssssssss'
+                response = ObjectWrapper(await create_fake_response('get', URL('http://test.test'),
+                                                                    session=self, loop=this.loop))
+
+                response._body = b'ssssssss'
                 response.status = 200
                 response.elapsed = timedelta(seconds=100)
                 response.headers = CIMultiDict({"content-type": "application/json"})
@@ -945,14 +946,14 @@ class OuterLogTest(TestCase):
 
 class PoolTest(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         this = self
 
         class SessionMock:
             async def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
-                response._post_init(this.loop)
-                response._content = b'ssssssss'
+                response = ObjectWrapper(await create_fake_response('get', URL('http://test.test'),
+                                                                    session=self, loop=this.loop))
+                response._body = b'ssssssss'
                 response.status = 200
                 response.elapsed = timedelta(seconds=100)
                 response.headers = CIMultiDict({"content-type": "application/json"})
@@ -1067,14 +1068,14 @@ class PoolTest(TestCase):
 
 class RateLimitTest(TestCase):
 
-    def setUp(self):
+    async def setUp(self):
         this = self
 
         class SessionMock:
             async def request(self, *args, **kwargs):
-                response = ObjectWrapper(ClientResponse('get', URL('http://test.test')))
-                response._post_init(this.loop)
-                response._content = b'ssssssss'
+                response = ObjectWrapper(await create_fake_response('get', URL('http://test.test'),
+                                                                    session=self, loop=this.loop))
+                response._body = b'ssssssss'
                 response.status = 200
                 response.elapsed = timedelta(seconds=100)
                 response.headers = CIMultiDict({"content-type": "application/json"})

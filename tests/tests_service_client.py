@@ -1,12 +1,13 @@
 from asyncio.tasks import Task
 
-from aiohttp.client_reqrep import ClientResponse
+from aiohttp import RequestInfo
 from asynctest.case import TestCase
 from asynctest.mock import patch
 from yarl import URL
 
 from service_client import ServiceClient
 from service_client.utils import ObjectWrapper
+from tests import create_fake_response
 
 
 class FakePlugin:
@@ -94,19 +95,23 @@ class ServiceBasicTest(TestCase):
                                             plugins=[self.plugin], config=self.config,
                                             base_path='http://foo.com/sdsd')
 
-    def tearDown(self):
-        pass
+    async def tearDown(self):
+        self.service_client.close()
 
     def _mock_session(self):
         async def request(*args, **kwargs):
             self.request = {'args': args, 'kwargs': kwargs}
-            self.response = ClientResponse('get', URL('http://test.test'))
-            self.response._post_init(self.loop)
-            self.response._content = b'bbbb'
+            self.response = await create_fake_response('get', 'http://test.test', session=self.mock_session)
+            self.response._body = b'bbbb'
             return self.response
 
+        async def close():
+            pass
+
         self.mock_session.request.side_effect = request
+        self.mock_session.close.side_effect = close
         self.mock_session.return_value = self.mock_session
+        self.mock_session.closed = True
 
     async def test_workflow_get(self):
         response = await self.service_client.call('testService1')
@@ -605,6 +610,9 @@ class ServiceBasicTest(TestCase):
         task.session = {}
         task.endpoint_desc = {}
         task.request_params = {}
-        response = self.service_client.create_response(method='get', url=URL("http://test.com"))
-        response._post_init(self.loop)
+        response = self.service_client.create_response(method='get', url=URL("http://test.com"),
+                                                       writer=None, continue100=False, timer=None,
+                                                       request_info=RequestInfo(URL("http://test.com"), 'get', []),
+                                                       auto_decompress=False,
+                                                       traces=[], loop=self.loop, session=self.service_client.session)
         self.assertIsInstance(response, ObjectWrapper)

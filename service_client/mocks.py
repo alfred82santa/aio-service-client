@@ -1,5 +1,6 @@
 from asyncio import get_event_loop
 
+from aiohttp import RequestInfo
 from aiohttp.client_reqrep import ClientResponse
 from dirty_loader import LoaderNamespaceReversedCached
 from functools import wraps
@@ -203,8 +204,12 @@ class BaseMock:
         self.url = url
         self.args = args
         self.kwargs = kwargs
-        self.response = ClientResponse(method, URL(url))
-        self.response._post_init(self.loop)
+        self.response = ClientResponse(method, URL(url),
+                                       writer=None, continue100=False, timer=None,
+                                       request_info=RequestInfo(URL(url), method, kwargs.get('headers', [])),
+                                       auto_decompress=False,
+                                       traces=[], loop=self.loop, session=self.session)
+
         self.response.status = self.mock_desc.get('status', 200)
         self.response.headers = CIMultiDict(self.mock_desc.get('headers', {}))
 
@@ -216,7 +221,7 @@ class BaseMock:
 class BaseFileMock(BaseMock):
     async def prepare_response(self):
         filename = self.mock_desc['file']
-        self.response._content = self.load_file(filename)
+        self.response._body = self.load_file(filename)
 
 
 class RawFileMock(BaseFileMock):

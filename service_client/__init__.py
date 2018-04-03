@@ -1,5 +1,5 @@
 import logging
-from asyncio import get_event_loop
+from asyncio import get_event_loop, ensure_future
 from asyncio.tasks import Task
 from urllib.parse import urlparse, urlunsplit
 
@@ -10,7 +10,7 @@ from yarl import URL
 
 from .utils import ObjectWrapper
 
-__version__ = '0.6.1'
+__version__ = '0.7.0'
 
 
 class ServiceClient:
@@ -224,7 +224,9 @@ class ServiceClient:
         Close service client and its plugins.
         """
         self._execute_plugin_hooks_sync(hook='close')
-        self.session.close()
+
+        if not self.session.closed:
+            ensure_future(self.session.close(), loop=self.loop)
 
     def __del__(self):  # pragma: no cover
         self.close()
