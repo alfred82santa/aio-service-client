@@ -1,10 +1,12 @@
-from asyncio import get_event_loop
+from asyncio import create_task, get_event_loop
+from asyncio.futures import Future
+from functools import wraps
 
 from aiohttp import RequestInfo
 from aiohttp.client_reqrep import ClientResponse
+from aiohttp.helpers import TimerContext
 from dirty_loader import LoaderNamespaceReversedCached
-from functools import wraps
-from multidict import CIMultiDict
+from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from .plugins import BasePlugin
@@ -204,14 +206,27 @@ class BaseMock:
         self.url = url
         self.args = args
         self.kwargs = kwargs
-        self.response = ClientResponse(method, URL(url),
-                                       writer=None, continue100=False, timer=None,
-                                       request_info=RequestInfo(URL(url), method, kwargs.get('headers', [])),
-                                       auto_decompress=False,
-                                       traces=[], loop=self.loop, session=self.session)
+
+        async def writer(*args, **kwargs):
+            return None
+
+        continue100 = Future()
+        continue100.set_result(False)
+
+        self.response = ClientResponse(method,
+                                       URL(url),
+                                       writer=create_task(writer()),
+                                       continue100=continue100,
+                                       timer=TimerContext(loop=self.loop),
+                                       request_info=RequestInfo(URL(url),
+                                                                method,
+                                                                kwargs.get('headers', [])),
+                                       traces=[],
+                                       loop=self.loop,
+                                       session=self.session)
 
         self.response.status = self.mock_desc.get('status', 200)
-        self.response.headers = CIMultiDict(self.mock_desc.get('headers', {}))
+        self.response._headers = CIMultiDictProxy(CIMultiDict(self.mock_desc.get('headers', {})))
 
         await self.prepare_response()
 

@@ -2,6 +2,7 @@ import os
 from aiohttp import hdrs
 from aiohttp.client import ClientSession
 from asynctest.case import TestCase
+from multidict import CIMultiDict
 
 from service_client.mocks import Mock, mock_manager, RawFileMock
 from service_client.utils import ObjectWrapper
@@ -124,7 +125,7 @@ class TestMocker(TestCase):
 
     @mock_manager.patch_mock_desc(patch={'mock_type': 'default:RawFileMock',
                                          'file': os.path.join(MOCKS_DIR, 'test_mock_text.data'),
-                                         'headers': {hdrs.CONTENT_TYPE: "text/plain; charset=utf8"}})
+                                         'headers': CIMultiDict({hdrs.CONTENT_TYPE: "text/plain; charset=utf8"})})
     async def test_patch_mock(self):
         await self.plugin.prepare_session(self.service_desc, self.session, {})
         self.assertIsInstance(self.session.request, RawFileMock)

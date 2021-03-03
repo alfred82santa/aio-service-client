@@ -1,11 +1,11 @@
 import logging
-from asyncio import wait_for, TimeoutError
+import weakref
+from asyncio import TimeoutError, wait_for
 from datetime import datetime
+from functools import wraps
 from urllib.parse import quote_plus
 
-import weakref
 from async_timeout import timeout as TimeoutContext
-from functools import wraps
 from multidict import CIMultiDict
 
 from service_client.utils import IncompleteFormatter, random_token

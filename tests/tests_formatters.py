@@ -95,7 +95,7 @@ foobar"""
                                                   'status_code': 404,
                                                   'elapsed': timedelta(seconds=0.214),
                                                   'exception': AttributeError('test exception')})
-        log_text = """EXCEPTION | GET http://example.com | 404 Not Found | 214 ms | AttributeError('test exception',)
+        log_text = """EXCEPTION | GET http://example.com | 404 Not Found | 214 ms | AttributeError('test exception')
 Headers:
 Test-Header-1: header value 1
 Test-Header-2: header value 2
@@ -110,7 +110,7 @@ foobar"""
                                                   'method': 'GET',
                                                   'url': 'http://example.com',
                                                   'exception': AttributeError('test exception')})
-        log_text = "EXCEPTION | GET http://example.com | AttributeError('test exception',)"
+        log_text = "EXCEPTION | GET http://example.com | AttributeError('test exception')"
 
         self.assertEqual(self.formatter.formatMessage(log_entry), log_text)
 

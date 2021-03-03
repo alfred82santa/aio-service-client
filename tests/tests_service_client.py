@@ -1,5 +1,12 @@
 from asyncio.tasks import Task
 
+from multidict import CIMultiDict
+
+try:
+    current_task = Task.current_task
+except AttributeError:
+    from asyncio import current_task
+
 from aiohttp import RequestInfo
 from asynctest.case import TestCase
 from asynctest.mock import patch
@@ -606,13 +613,14 @@ class ServiceBasicTest(TestCase):
         await self.service_client.call('testService5', payload='aaaa')
 
     async def test_create_response(self):
-        task = Task.current_task(loop=self.loop)
+        task = current_task(loop=self.loop)
         task.session = {}
         task.endpoint_desc = {}
         task.request_params = {}
         response = self.service_client.create_response(method='get', url=URL("http://test.com"),
                                                        writer=None, continue100=False, timer=None,
-                                                       request_info=RequestInfo(URL("http://test.com"), 'get', []),
-                                                       auto_decompress=False,
+                                                       request_info=RequestInfo(URL("http://test.com"),
+                                                                                'get',
+                                                                                headers=CIMultiDict()),
                                                        traces=[], loop=self.loop, session=self.service_client.session)
         self.assertIsInstance(response, ObjectWrapper)

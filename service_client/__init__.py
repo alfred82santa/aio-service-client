@@ -1,7 +1,11 @@
 import logging
-from asyncio import get_event_loop, ensure_future
-from asyncio.tasks import Task
+from asyncio import Task, ensure_future, get_event_loop
 from urllib.parse import urlparse, urlunsplit
+
+try:
+    current_task = Task.current_task
+except AttributeError:
+    from asyncio import current_task
 
 from aiohttp.client import ClientSession
 from aiohttp.client_reqrep import ClientResponse
@@ -10,7 +14,7 @@ from yarl import URL
 
 from .utils import ObjectWrapper
 
-__version__ = '0.7.0'
+__version__ = '0.7.1'
 
 
 class ServiceClient:
@@ -36,7 +40,7 @@ class ServiceClient:
 
     def create_response(self, *args, **kwargs):
         response = ObjectWrapper(ClientResponse(*args, **kwargs))
-        task = Task.current_task(loop=self.loop)
+        task = current_task(loop=self.loop)
 
         self._execute_plugin_hooks_sync('prepare_response',
                                         endpoint_desc=task.endpoint_desc, session=task.session,
@@ -78,7 +82,7 @@ class ServiceClient:
                                                                  request_params=request_params)
 
             await self.before_request(endpoint_desc, session, request_params)
-            task = Task.current_task(loop=self.loop)
+            task = current_task(loop=self.loop)
             task.session = session
             task.endpoint_desc = endpoint_desc
             task.request_params = request_params
