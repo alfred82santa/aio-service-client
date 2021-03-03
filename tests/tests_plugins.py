@@ -9,7 +9,7 @@ from asyncio.tasks import Task, ensure_future, gather, shield, sleep, wait, wait
 from datetime import datetime, timedelta
 
 try:
-    all_task = Task.all_tasks
+    all_tasks = Task.all_tasks
 except AttributeError:
     from asyncio import all_tasks
 
