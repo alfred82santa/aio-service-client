@@ -2,7 +2,6 @@ from asyncio import get_event_loop
 from asyncio.futures import Future
 from functools import wraps
 
-
 from aiohttp import RequestInfo
 from aiohttp.client_reqrep import ClientResponse
 from aiohttp.helpers import TimerContext
@@ -194,7 +193,7 @@ class BaseMock:
     async def __call__(self, *args, **kwargs):
         try:
             from asyncio import create_task
-        except IndexError:
+        except ImportError:  # pragma: no cover
             create_task = self.loop.create_task
 
         args = list(args)
@@ -207,7 +206,6 @@ class BaseMock:
             url = kwargs['url']
         except KeyError:
             url = args.pop()
-
 
         self.method = method
         self.url = url

@@ -4,7 +4,7 @@ from urllib.parse import urlparse, urlunsplit
 
 try:
     current_task = Task.current_task
-except AttributeError:
+except AttributeError:  # pragma: no cover
     from asyncio import current_task
 
 from aiohttp.client import ClientSession

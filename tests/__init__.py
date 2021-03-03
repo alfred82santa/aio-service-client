@@ -10,7 +10,7 @@ async def create_fake_response(method, url, *, session, headers=None, loop=None)
 
     try:
         from asyncio import create_task
-    except ImportError:
+    except ImportError:  # pragma: no cover
         create_task = loop.create_task
 
     async def writer(*args, **kwargs):

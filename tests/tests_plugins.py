@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 try:
     all_tasks = Task.all_tasks
-except AttributeError:
+except AttributeError:  # pragma: no cover
     from asyncio import all_tasks
 
 from aiohttp.client import ClientSession

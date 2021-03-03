@@ -4,7 +4,7 @@ from multidict import CIMultiDict
 
 try:
     current_task = Task.current_task
-except AttributeError:
+except AttributeError:  # pragma: no cover
     from asyncio import current_task
 
 from aiohttp import RequestInfo
