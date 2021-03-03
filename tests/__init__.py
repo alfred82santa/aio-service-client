@@ -1,4 +1,4 @@
-from asyncio import Future, create_task, get_event_loop
+from asyncio import Future, get_event_loop
 
 from aiohttp import ClientResponse, RequestInfo
 from aiohttp.helpers import TimerContext
@@ -7,6 +7,11 @@ from yarl import URL
 
 async def create_fake_response(method, url, *, session, headers=None, loop=None):
     loop = loop or get_event_loop()
+
+    try:
+        from asyncio import create_task
+    except ImportError:
+        create_task = loop.create_task
 
     async def writer(*args, **kwargs):
         return None
