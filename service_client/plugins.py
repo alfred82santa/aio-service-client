@@ -1,11 +1,11 @@
 import logging
-from asyncio import wait_for, TimeoutError
+import weakref
+from asyncio import TimeoutError, wait_for
 from datetime import datetime
+from functools import wraps
 from urllib.parse import quote_plus
 
-import weakref
 from async_timeout import timeout as TimeoutContext
-from functools import wraps
 from multidict import CIMultiDict
 
 from service_client.utils import IncompleteFormatter, random_token
@@ -336,16 +336,15 @@ class BaseLimitPlugin(BasePlugin):
         self.limit = limit
         self._counter = 0
         self._fut = None
-        self._pending = 0
+        self._pending_futs = []
         self._timeout = timeout
         self._hard_limit = hard_limit
 
     @property
     def pending(self):
-        return self._pending
+        return len(self._pending_futs)
 
     async def _acquire(self):
-
         timeout = self._timeout
         while True:
             if self._counter < self.limit:
@@ -355,26 +354,26 @@ class BaseLimitPlugin(BasePlugin):
             if self._hard_limit is not None and self._hard_limit < self.pending:
                 raise TooManyRequestsPendingError(self.TOO_MANY_REQ_PENDING_MSG)
 
-            if self._fut is None:
-                self._fut = self.service_client.loop.create_future()
-            self._pending += 1
+            fut = self.service_client.loop.create_future()
+            self._pending_futs.append(fut)
 
             try:
                 now = self.service_client.loop.time()
-                await wait_for(self._fut, timeout=timeout, loop=self.service_client.loop)
+                await wait_for(fut, timeout=timeout, loop=self.service_client.loop)
                 if timeout is not None:
                     timeout -= self.service_client.loop.time() - now
-                    if timeout <= 0:
-                        raise TimeoutError()
             except TimeoutError:
                 raise TooMuchTimePendingError(self.TOO_MUCH_TIME_MSG)
-            finally:
-                self._pending -= 1
 
     def _release(self):
         self._counter -= 1
-        if self._fut is not None:
-            self._fut.set_result(None)
+
+        try:
+            fut = self._pending_futs.pop(0)
+        except IndexError:
+            pass
+        else:
+            fut.set_result(None)
 
     async def before_request(self, endpoint_desc, session, request_params):
         start = self.service_client.loop.time()
@@ -386,9 +385,10 @@ class BaseLimitPlugin(BasePlugin):
                     self.service_client.loop.time() - start)
 
     def close(self):
-        if self._fut is not None:
-            from service_client import ConnectionClosedError
-            self._fut.set_exception(ConnectionClosedError('Connection closed'))
+        from service_client import ConnectionClosedError
+        while len(self._pending_futs):
+            fut = self._pending_futs.pop(0)
+            fut.set_exception(ConnectionClosedError('Connection closed'))
 
 
 class Pool(BaseLimitPlugin):

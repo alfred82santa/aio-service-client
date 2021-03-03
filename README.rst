@@ -126,6 +126,14 @@ In order to send a payload you must use ``payload`` keyword on call:
 Changelog
 =========
 
+
+v0.7.1
+------
+
+- Python 3.9 compatible.
+- Update aiohttp.
+
+
 v0.6.1
 ------
 

@@ -3,11 +3,15 @@ Created on 04/04/2014
 
 @author: alfred
 '''
-import asyncio
 import logging
 from asyncio import TimeoutError
-from asyncio.tasks import shield, sleep
+from asyncio.tasks import Task, ensure_future, gather, shield, sleep, wait, wait_for
 from datetime import datetime, timedelta
+
+try:
+    all_tasks = Task.all_tasks
+except AttributeError:  # pragma: no cover
+    from asyncio import all_tasks
 
 from aiohttp.client import ClientSession
 from asynctest.case import TestCase
@@ -99,6 +103,19 @@ class PathTests(TestCase):
                          '/test/foo/{path_param3}/noway')
 
         self.assertDictEqual(self.request_params, {'path_param2': 'bar'})
+
+
+class ResponseMock:
+
+    def __init__(self, spend_time):
+        self.spend_time = spend_time
+
+    async def start(self, *args, **kwargs):
+        await sleep(self.spend_time)
+
+    async def read(self):
+        await sleep(self.spend_time)
+        return 'data'
 
 
 class TimeoutTests(TestCase):
@@ -198,46 +215,51 @@ class HeadersTests(TestCase):
     async def test_use_default(self):
         await self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'headers': {'X-Foo-Bar': 'test headers'}})
+        self.assertDictEqual(self.request_params,
+                             {'path_param1': 'foo',
+                              'path_param2': 'bar',
+                              'headers': CIMultiDict({'X-Foo-Bar': 'test headers'})})
 
     async def test_use_service(self):
         self.endpoint_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
         await self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'headers': {'X-Foo-Bar': 'test headers service_client'}})
+        self.assertDictEqual(self.request_params,
+                             {'path_param1': 'foo',
+                              'path_param2': 'bar',
+                              'headers': CIMultiDict({'X-Foo-Bar': 'test headers service_client'})})
 
     async def test_add_from_service(self):
         self.endpoint_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
         await self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'headers': {'X-Foo-Bar': 'test headers',
-                                                               'X-Foo-Bar-Service': 'test headers service_client'}})
+        self.assertDictEqual(self.request_params,
+                             {'path_param1': 'foo',
+                              'path_param2': 'bar',
+                              'headers': CIMultiDict({'X-Foo-Bar': 'test headers',
+                                                      'X-Foo-Bar-Service': 'test headers service_client'})})
 
     async def test_use_request(self):
         self.endpoint_desc['headers'] = {'x-foo-bar': 'test headers service_client'}
         self.request_params['headers'] = {'x-foo-bar': 'test headers request'}
         await self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'headers': {'X-Foo-Bar': 'test headers request'}})
+        self.assertDictEqual(self.request_params,
+                             {'path_param1': 'foo',
+                              'path_param2': 'bar',
+                              'headers': CIMultiDict({'X-Foo-Bar': 'test headers request'})})
 
-    async def test_add_from_request(self):
-        self.endpoint_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
-        self.request_params['headers'] = {'x-foo-bar-request': 'test headers request'}
-        await self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
+        async def test_add_from_request(self):
+            self.endpoint_desc['headers'] = {'x-foo-bar-service': 'test headers service_client'}
+            self.request_params['headers'] = {'x-foo-bar-request': 'test headers request'}
+            await self.plugin.prepare_request_params(self.endpoint_desc, self.session, self.request_params)
 
-        self.assertDictEqual(self.request_params, {'path_param1': 'foo',
-                                                   'path_param2': 'bar',
-                                                   'headers': {'X-Foo-Bar': 'test headers',
-                                                               'X-Foo-Bar-Service': 'test headers service_client',
-                                                               'X-Foo-Bar-Request': 'test headers request'}})
+            self.assertDictEqual(self.request_params,
+                                 {'path_param1': 'foo',
+                                  'path_param2': 'bar',
+                                  'headers': CIMultiDict({'X-Foo-Bar': 'test headers',
+                                                          'X-Foo-Bar-Service': 'test headers service_client',
+                                                          'X-Foo-Bar-Request': 'test headers request'})})
 
 
 class QueryParamsTest(TestCase):
@@ -365,19 +387,6 @@ class QueryParamsDefaultTest(TestCase):
                                   'qparam2': 'test2',
                                   'qparamRequest': 'test',
                                   'default_param2': 'bar'}})
-
-
-class ResponseMock:
-
-    def __init__(self, spend_time):
-        self.spend_time = spend_time
-
-    async def start(self, *args, **kwargs):
-        await sleep(self.spend_time)
-
-    async def read(self):
-        await sleep(self.spend_time)
-        return 'data'
 
 
 class ElapsedTest(TestCase):
@@ -591,7 +600,7 @@ class InnerLogTest(TestCase):
                 response._body = b'ssssssss'
                 response.status = 200
                 response.elapsed = timedelta(seconds=100)
-                response.headers = CIMultiDict({"content-type": "application/json"})
+                response._headers = CIMultiDict({"content-type": "application/json"})
                 return response
 
         class LoggerMock:
@@ -796,7 +805,7 @@ class OuterLogTest(TestCase):
                 response._body = b'ssssssss'
                 response.status = 200
                 response.elapsed = timedelta(seconds=100)
-                response.headers = CIMultiDict({"content-type": "application/json"})
+                response._headers = CIMultiDict({"content-type": "application/json"})
                 return response
 
         class LoggerMock:
@@ -979,45 +988,45 @@ class PoolTest(TestCase):
                                'path_param2': 'bar'}
 
     def tearDown(self):
-        pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
+        pending = [t for t in all_tasks(loop=self.loop) if not t.done()]
         while len(pending):
             try:
-                self.loop.run_until_complete(asyncio.gather(*pending,
-                                                            loop=self.loop))
-            except Exception:
+                self.loop.run_until_complete(gather(*pending,
+                                                    loop=self.loop))
+            except BaseException:
                 pass
             finally:
-                pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
+                pending = [t for t in all_tasks(loop=self.loop) if not t.done()]
 
     async def test_limit(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                               self.request_params))
+        fut = ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                       self.request_params))
 
         with self.assertRaises(TimeoutError):
-            await asyncio.wait_for(shield(fut), 0.01)
+            await wait_for(shield(fut), 0.01)
 
         await self.plugin.on_response(self.endpoint_desc, self.session,
                                       self.request_params, None)
 
-        await asyncio.wait_for(fut, 0.1)
+        await wait_for(fut, 0.1)
 
     async def test_limit_using_exception(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                               self.request_params))
+        fut = ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                       self.request_params))
 
         with self.assertRaises(TimeoutError):
-            await asyncio.wait_for(shield(fut), 0.01)
+            await wait_for(shield(fut), 0.01)
 
         await self.plugin.on_exception(self.endpoint_desc, self.session,
                                        self.request_params, Exception())
 
-        await asyncio.wait_for(fut, 0.1)
+        await wait_for(fut, 0.1)
 
     async def test_timeout(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
@@ -1031,16 +1040,16 @@ class PoolTest(TestCase):
         self.assertLessEqual(self.session.blocked_by_pool, 0.5)
 
     async def test_hard_limit(self):
-        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                         self.request_params))
-        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                         self.request_params))
-        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                         self.request_params))
+        ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                 self.request_params))
+        ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                 self.request_params))
+        ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                 self.request_params))
 
         with self.assertRaisesRegex(TooManyRequestsPendingError, "Too many requests pending on pool"):
-            await asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                              self.request_params), timeout=1)
+            await wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                      self.request_params), timeout=1)
 
         self.assertGreaterEqual(self.session.blocked_by_pool, 0)
         self.assertLessEqual(self.session.blocked_by_pool, 0.1)
@@ -1050,10 +1059,10 @@ class PoolTest(TestCase):
                                          self.request_params)
 
         with self.assertRaises(ConnectionClosedError):
-            fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc,
-                                                                   self.session,
-                                                                   self.request_params))
-            await asyncio.sleep(0)
+            fut = ensure_future(self.plugin.before_request(self.endpoint_desc,
+                                                           self.session,
+                                                           self.request_params))
+            await sleep(0)
             self.plugin.close()
             await fut
 
@@ -1101,62 +1110,62 @@ class RateLimitTest(TestCase):
                                'path_param2': 'bar'}
 
     def tearDown(self):
-        pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
+        pending = [t for t in all_tasks(loop=self.loop) if not t.done()]
         while len(pending):
             try:
-                self.loop.run_until_complete(asyncio.gather(*pending,
-                                                            loop=self.loop))
-            except Exception:
+                self.loop.run_until_complete(gather(*pending,
+                                                    loop=self.loop))
+            except BaseException:
                 pass
             finally:
-                pending = [t for t in asyncio.Task.all_tasks() if not t.done()]
+                pending = [t for t in all_tasks(loop=self.loop) if not t.done()]
 
     async def test_limit(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                               self.request_params))
+        fut = ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                       self.request_params))
 
         with self.assertRaises(TimeoutError):
-            await asyncio.wait_for(shield(fut), 0.1)
+            await wait_for(shield(fut), 0.1)
 
         await self.plugin.on_response(self.endpoint_desc, self.session,
                                       self.request_params, None)
 
-        await asyncio.sleep(0.2)
+        await sleep(0.2)
 
-        await asyncio.wait_for(fut, 0.5)
+        await wait_for(fut, 0.5)
 
     async def test_limit_using_exception(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
 
-        fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                               self.request_params))
+        fut = ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                       self.request_params))
 
         with self.assertRaises(TimeoutError):
-            await asyncio.wait_for(shield(fut), 0.1)
+            await wait_for(shield(fut), 0.1)
 
         await self.plugin.on_exception(self.endpoint_desc, self.session,
                                        self.request_params, Exception())
 
-        await asyncio.sleep(0.2)
+        await sleep(0.2)
 
-        await asyncio.wait_for(fut, 0.1)
+        await wait_for(fut, 0.1)
 
     async def test_timeout(self):
-        asyncio.wait([
-            asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                             self.request_params)),
-            asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                             self.request_params))
+        await wait([
+            ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                     self.request_params)),
+            ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                     self.request_params))
         ])
 
         await self.plugin.on_exception(self.endpoint_desc, self.session,
                                        self.request_params, Exception())
 
-        await asyncio.sleep(0.2)
+        await sleep(0.2)
 
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
@@ -1171,14 +1180,14 @@ class RateLimitTest(TestCase):
     async def test_hard_limit(self):
         await self.plugin.before_request(self.endpoint_desc, self.session,
                                          self.request_params)
-        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                         self.request_params))
-        asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                         self.request_params))
+        ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                 self.request_params))
+        ensure_future(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                 self.request_params))
 
         with self.assertRaisesRegex(TooManyRequestsPendingError, "Too many requests pending by rate limit"):
-            await asyncio.wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
-                                                              self.request_params), timeout=1)
+            await wait_for(self.plugin.before_request(self.endpoint_desc, self.session,
+                                                      self.request_params), timeout=1)
 
         self.assertGreaterEqual(self.session.blocked_by_ratelimit, 0)
         self.assertLessEqual(self.session.blocked_by_ratelimit, 0.5)
@@ -1188,10 +1197,10 @@ class RateLimitTest(TestCase):
                                          self.request_params)
 
         with self.assertRaises(ConnectionClosedError):
-            fut = asyncio.ensure_future(self.plugin.before_request(self.endpoint_desc,
-                                                                   self.session,
-                                                                   self.request_params))
-            await asyncio.sleep(0)
+            fut = ensure_future(self.plugin.before_request(self.endpoint_desc,
+                                                           self.session,
+                                                           self.request_params))
+            await sleep(0)
             self.plugin.close()
             await fut
 
@@ -1203,4 +1212,4 @@ class RateLimitTest(TestCase):
             await self.plugin.on_response(self.endpoint_desc, self.session,
                                           self.request_params, None)
 
-            await asyncio.sleep(0.2)
+            await sleep(0.2)

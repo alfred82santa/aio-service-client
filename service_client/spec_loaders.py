@@ -1,5 +1,3 @@
-
-
 def json_loader(filename):
     from json import load
     with open(filename) as f:
@@ -7,9 +5,9 @@ def json_loader(filename):
 
 
 def yaml_loader(filename):
-    from yaml import load
+    from yaml import load, FullLoader
     with open(filename) as f:
-        return load(f)
+        return load(f, Loader=FullLoader)
 
 
 def configuration_loader(filename):

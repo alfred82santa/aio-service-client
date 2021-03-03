@@ -1,6 +1,6 @@
-from urllib.parse import urlencode
 from http.server import BaseHTTPRequestHandler
 from logging import Formatter, PercentStyle, StrFormatStyle, StringTemplateStyle
+from urllib.parse import urlencode
 
 _STYLES = {
     '%': PercentStyle,
@@ -70,7 +70,8 @@ class ServiceClientFormatter(Formatter):
             pass
 
         try:
-            record.exception_repr = repr(record.exception)
+            record.exception_repr = "{type}('{message}')".format(type=type(record.exception).__name__,
+                                                                 message=str(record.exception))
         except AttributeError:
             pass
 
