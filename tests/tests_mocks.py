@@ -1,10 +1,11 @@
 import os
-from aiohttp import hdrs
+
+from aiohttp import ClientResponse, hdrs
 from aiohttp.client import ClientSession
 from asynctest.case import TestCase
 from multidict import CIMultiDict
 
-from service_client.mocks import Mock, mock_manager, RawFileMock
+from service_client.mocks import Mock, RawDataMock, RawFileMock, mock_manager
 from service_client.utils import ObjectWrapper
 
 MOCKS_DIR = os.path.join(os.path.dirname(__file__), 'mock_files')
@@ -31,9 +32,13 @@ class TestMocker(TestCase):
                                       'file': 'data/mocks/opengate_v6/alarm/alarm_list.json'},
                              'endpoint': 'test_endpoint'}
 
-        self.service_client = type('DynTestServiceClient', (),
-                                   {'name': 'test_service_name',
-                                    'loop': self.loop})()
+        self.service_client = type(
+            'DynTestServiceClient',
+            (),
+            {'name': 'test_service_name',
+             'create_response': lambda self, *args, **kwargs: ObjectWrapper(ClientResponse(*args, **kwargs)),
+             'loop': self.loop}
+        )()
         self.plugin.assign_service_client(self.service_client)
 
     async def test_calling_mock(self):
@@ -132,3 +137,48 @@ class TestMocker(TestCase):
         response = await self.session.request('POST', 'default_url')
         self.assertEqual(200, response.status)
         self.assertEqual('test data', (await response.text()))
+
+    @mock_manager.patch_mock_desc(patch={'mock_type': 'default:RawDataMock',
+                                         'data': b'binary-data'})
+    async def test_patch_mock_raw_data_bytes(self):
+        await self.plugin.prepare_session(self.service_desc, self.session, {})
+        self.assertIsInstance(self.session.request, RawDataMock)
+        response = await self.session.request('POST', 'default_url')
+        self.assertEqual(200, response.status)
+        self.assertEqual(b'binary-data', (await response.read()))
+
+    @mock_manager.patch_mock_desc(patch={'mock_type': 'default:RawDataMock',
+                                         'data': 'text-data'})
+    async def test_patch_mock_raw_data_string(self):
+        await self.plugin.prepare_session(self.service_desc, self.session, {})
+        response = await self.session.request('POST', 'default_url')
+        self.assertEqual(b'text-data', (await response.read()))
+
+    @mock_manager.patch_mock_desc(patch={'mock_type': 'default:RawDataMock',
+                                         'data': {}})
+    async def test_patch_mock_raw_data_fail(self):
+        with self.assertRaises(ValueError):
+            await self.plugin.prepare_session(self.service_desc, self.session, {})
+            await self.session.request('POST', 'default_url')
+
+    @mock_manager.patch_mock_desc(patch={'mock_type': 'default:JsonDataMock',
+                                         'data': {'key': 'value'}})
+    async def test_patch_mock_json_dict(self):
+        await self.plugin.prepare_session(self.service_desc, self.session, {})
+        response = await self.session.request('POST', 'default_url')
+        self.assertEqual(200, response.status)
+        self.assertEqual(b'{"key": "value"}', (await response.read()))
+
+    @mock_manager.patch_mock_desc(patch={'mock_type': 'default:JsonDataMock',
+                                         'data': ['value_1', 2]})
+    async def test_patch_mock_json_list(self):
+        await self.plugin.prepare_session(self.service_desc, self.session, {})
+        response = await self.session.request('POST', 'default_url')
+        self.assertEqual(b'["value_1", 2]', (await response.read()))
+
+    @mock_manager.patch_mock_desc(patch={'mock_type': 'default:JsonDataMock',
+                                         'data': 'fail'})
+    async def test_patch_mock_json_fail(self):
+        with self.assertRaises(ValueError):
+            await self.plugin.prepare_session(self.service_desc, self.session, {})
+            await self.session.request('POST', 'default_url')
