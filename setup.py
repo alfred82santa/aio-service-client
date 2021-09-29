@@ -1,6 +1,6 @@
 import ast
-
 import os
+
 from setuptools import setup
 
 path = os.path.join(os.path.dirname(__file__), 'service_client', '__init__.py')
@@ -40,14 +40,17 @@ setup(
     classifiers=[
         'Intended Audience :: Developers',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
         'Development Status :: 4 - Beta'],
     packages=['service_client'],
     include_package_data=False,
     install_requires=['dirty-loader>=0.2.2', 'aiohttp>=3.7.4', 'configure-fork'],
     description="Service Client Framework powered by Python asyncio.",
+    long_description_content_type='text/x-rst',
     long_description=open(os.path.join(os.path.dirname(__file__), 'README.rst')).read(),
     test_suite="nose.collector",
     tests_require="nose",

@@ -1,9 +1,10 @@
+import json
 from asyncio import get_event_loop
 from asyncio.futures import Future
+from collections import Mapping
 from functools import wraps
 
 from aiohttp import RequestInfo
-from aiohttp.client_reqrep import ClientResponse
 from aiohttp.helpers import TimerContext
 from dirty_loader import LoaderNamespaceReversedCached
 from multidict import CIMultiDict, CIMultiDictProxy
@@ -164,6 +165,7 @@ class Mock(BasePlugin):
         return self.loader.factory(mock_desc.get('mock_type'),
                                    endpoint_desc, session,
                                    request_params, mock_desc,
+                                   service_client=self.service_client,
                                    loop=loop)
 
     async def prepare_session(self, endpoint_desc, session, request_params):
@@ -183,11 +185,12 @@ class Mock(BasePlugin):
 class BaseMock:
 
     def __init__(self, endpoint_desc, session, request_params,
-                 mock_desc, loop=None):
+                 mock_desc, service_client, loop=None):
         self.endpoint_desc = endpoint_desc
         self.session = session
         self.request_params = request_params
         self.mock_desc = mock_desc
+        self.service_client = service_client
         self.loop = loop or get_event_loop()
 
     async def __call__(self, *args, **kwargs):
@@ -218,17 +221,17 @@ class BaseMock:
         continue100 = Future()
         continue100.set_result(False)
 
-        self.response = ClientResponse(method,
-                                       URL(url),
-                                       writer=create_task(writer()),
-                                       continue100=continue100,
-                                       timer=TimerContext(loop=self.loop),
-                                       request_info=RequestInfo(URL(url),
-                                                                method,
-                                                                kwargs.get('headers', [])),
-                                       traces=[],
-                                       loop=self.loop,
-                                       session=self.session)
+        self.response = self.service_client.create_response(method,
+                                                            URL(url),
+                                                            writer=create_task(writer()),
+                                                            continue100=continue100,
+                                                            timer=TimerContext(loop=self.loop),
+                                                            request_info=RequestInfo(URL(url),
+                                                                                     method,
+                                                                                     kwargs.get('headers', [])),
+                                                            traces=[],
+                                                            loop=self.loop,
+                                                            session=self.session)
 
         self.response.status = self.mock_desc.get('status', 200)
         self.response._headers = CIMultiDictProxy(CIMultiDict(self.mock_desc.get('headers', {})))
@@ -248,3 +251,25 @@ class RawFileMock(BaseFileMock):
 
     def load_file(self, filename):
         return open(filename, "rb").read()
+
+
+class RawDataMock(BaseMock):
+    async def prepare_response(self):
+        data = self.mock_desc['data']
+        if isinstance(data, str):
+            data = data.encode()
+        elif not isinstance(data, bytes):
+            raise ValueError(data)
+        self.response._body = data
+
+
+class JsonDataMock(BaseMock):
+    async def prepare_response(self):
+        data = self.mock_desc['data']
+        encoder = self.mock_desc.get('json_encoder', None)
+
+        if isinstance(data, (dict, Mapping, list)):
+            data = json.dumps(data, cls=encoder).encode()
+        else:
+            raise ValueError(data)
+        self.response._body = data

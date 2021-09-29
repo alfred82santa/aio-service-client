@@ -127,6 +127,13 @@ Changelog
 =========
 
 
+v0.7.2
+------
+
+- Fix Mock and Loggers plugins work together.
+- Added RawDataMock in order to allow to set mock data as string or byte-string directly on spec.
+- Added JsonDataMock in order to allow to set mock json data as a dictionary or list on spec.
+
 v0.7.1
 ------
 
@@ -145,8 +152,8 @@ v0.6.1
 
 - Tests improved.
 
-- Added new exceptions: :class:`~service_client.plugins.TooManyRequestsPendingError` and
-  :class:`~service_client.plugins.TooMuchTimePendingError`.
+- Added new exceptions: `service_client.plugins.TooManyRequestsPendingError` and
+  `service_client.plugins.TooMuchTimePendingError`.
 
 - Added decorator in order to help to build service clients. It allows to define a method using a request model
   but to call it using keywords to build request model which will be used to call method.
@@ -172,7 +179,7 @@ v0.6.0
 ------
 
 - Improved Pool plugin. It now allows to set hard limit of pending requests, if it reach limit requests will
-  fail raising :class:`RequestLimitError`. In same way, it allows to set a timeout, in seconds, for pending requests and
+  fail raising `RequestLimitError`. In same way, it allows to set a timeout, in seconds, for pending requests and
   it will raise same exception.
 
 - Added new RateLimit plugin. It is similar to Pool plugin but using a period parameter, in seconds, in order to limit number
